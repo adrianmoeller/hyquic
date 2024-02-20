@@ -18,3 +18,4 @@ void hyquic_init(struct hyquic_adapter *hyquic);
 void hyquic_free(struct hyquic_adapter *hyquic);
 inline void hyquic_transport_params_add(struct hyquic_transport_param *param, struct list_head *param_list);
 size_t hyquic_transport_params_total_length(struct list_head *param_list);
+struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t length);

@@ -1464,13 +1464,35 @@ int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_p
 			p += valuelen;
 			break;
 		default:
-			/* Ignore unknown parameter */
-			if (!quic_get_var(&p, &len, &valuelen))
-				return -1;
-			if (len < valuelen)
-				return -1;
-			len -= valuelen;
-			p += valuelen;
+			if (!quic_hyquic(sk)->enabled)
+			{
+				/* Ignore unknown parameter */
+				if (!quic_get_var(&p, &len, &valuelen))
+					return -1;
+				if (len < valuelen)
+					return -1;
+				len -= valuelen;
+				p += valuelen;
+			}
+			else
+			{
+				uint32_t type_length = quic_var_len(type);
+				uint8_t *tp_start = p - type_length;
+				size_t tp_length;
+				void *param;
+				struct hyquic_transport_param *entry;
+
+				if (!quic_get_var(&p, &len, &valuelen))
+					return -1;
+				tp_length = type_length + valuelen;
+				param = kmemdup(tp_start, tp_length, GFP_KERNEL);
+				if (!param)
+					return -ENOMEM;
+				entry = hyquic_transport_param_create(param, tp_length);
+				if (!entry)
+					return -ENOMEM;
+				hyquic_transport_params_add(entry, &quic_hyquic(sk)->transport_params_remote);
+			}
 			break;
 		}
 	}
@@ -1572,6 +1594,15 @@ int quic_frame_get_transport_params_ext(struct sock *sk, struct quic_transport_p
 		p = quic_put_param(p, QUIC_TRANSPORT_PARAM_MAX_DATAGRAM_FRAME_SIZE,
 				   params->max_datagram_frame_size);
 	}
+
+	if (quic_hyquic(sk)->enabled)
+	{
+		struct hyquic_transport_param *cursor;
+		hyquic_transport_param_for_each(cursor, &quic_hyquic(sk)->transport_params_local) {
+			p = quic_put_data(p, cursor->param, cursor->length);
+		}
+	}
+
 	*len = p - data;
 	return 0;
 }

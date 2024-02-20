@@ -40,3 +40,13 @@ size_t hyquic_transport_params_total_length(struct list_head *param_list)
 	}
     return total_length;
 }
+
+struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t length)
+{
+    struct hyquic_transport_param *param = (struct hyquic_transport_param*) kmalloc(sizeof(struct hyquic_transport_param), GFP_KERNEL);
+    if (!param)
+        return NULL;
+    param->param = data;
+    param->length = length;
+    return param;
+}
