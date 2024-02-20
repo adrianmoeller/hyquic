@@ -25,6 +25,7 @@
 #include "input.h"
 #include "timer.h"
 #include "cong.h"
+#include "hybrid.h"
 
 extern struct proto quic_prot;
 extern struct proto quicv6_prot;
@@ -82,6 +83,8 @@ struct quic_sock {
 	struct quic_packet		packet;
 	struct quic_cong		cong;
 	struct quic_timer		timers[QUIC_TIMER_MAX];
+
+	struct hyquic_adapter hyquic;
 };
 
 struct quic6_sock {
@@ -223,6 +226,11 @@ static inline void quic_set_state(struct sock *sk, int state)
 {
 	inet_sk_set_state(sk, state);
 	sk->sk_state_change(sk);
+}
+
+static inline struct hyquic_adapter* quic_hyquic(const struct sock *sk)
+{
+	return &quic_sk(sk)->hyquic;
 }
 
 static inline bool quic_version_supported(u32 version)

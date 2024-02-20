@@ -2,7 +2,7 @@ man7_MANS		= quic.7
 EXTRA_DIST		= $(man7_MANS)
 
 lib_LTLIBRARIES		= libquic.la
-libquic_la_SOURCES	= connection.c connection.h crypto.c
+libquic_la_SOURCES	= connection.c connection.h crypto.c hyquic.c
 libquic_la_CFLAGS	= -Werror -Wall $(LIBGNUTLS_CFLAGS)
 libquic_la_LIBADD	= $(LIBGNUTLS_LIBS)
 

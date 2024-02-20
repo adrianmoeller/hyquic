@@ -182,6 +182,8 @@ static int quic_init_sock(struct sock *sk)
 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 	local_bh_enable();
 
+	hyquic_init(quic_hyquic(sk));
+
 	return 0;
 }
 
@@ -205,6 +207,8 @@ static void quic_destroy_sock(struct sock *sk)
 	sk_sockets_allocated_dec(sk);
 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, -1);
 	local_bh_enable();
+
+	hyquic_free(quic_hyquic(sk));
 }
 
 static int quic_bind(struct sock *sk, struct sockaddr *addr, int addr_len)
@@ -1307,6 +1311,22 @@ static int quic_sock_set_connection_close(struct sock *sk, struct quic_connectio
 	return 0;
 }
 
+static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t length)
+{
+	struct hyquic_adapter *hyquic = quic_hyquic(sk);
+	struct hyquic_transport_param *param_entry;
+
+	param_entry = (struct hyquic_transport_param*) kmalloc(sizeof(struct hyquic_transport_param), GFP_KERNEL);
+	if (!param_entry)
+		return -ENOMEM;
+	param_entry->param = kmemdup(data, length, GFP_KERNEL);
+	if (!param_entry->param)
+		return -ENOMEM;
+	param_entry->length = length;
+	hyquic_transport_params_add(param_entry, &hyquic->transport_params_remote);
+	return 0;
+}
+
 static int quic_setsockopt(struct sock *sk, int level, int optname,
 			   sockptr_t optval, unsigned int optlen)
 {
@@ -1362,6 +1382,9 @@ static int quic_setsockopt(struct sock *sk, int level, int optname,
 		break;
 	case QUIC_SOCKOPT_CRYPTO_SECRET:
 		retval = quic_sock_set_crypto_secret(sk, kopt, optlen);
+		break;
+	case HYQUIC_SOCKOPT_TRANSPORT_PARAM:
+		retval = hyquic_sock_set_transport_param(sk, kopt, optlen);
 		break;
 	default:
 		retval = -ENOPROTOOPT;
@@ -1590,6 +1613,44 @@ static int quic_sock_get_connection_close(struct sock *sk, int len, char __user 
 	return 0;
 }
 
+static int hyquic_sock_get_transport_param(struct sock *sk, int len, char __user *optval, int __user *optlen)
+{
+	struct hyquic_adapter *hyquic = quic_hyquic(sk);
+	size_t total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_local);
+	char __user *pos = optval;
+	struct hyquic_transport_param *cursor;
+
+	if (len < total_params_length)
+		return -EINVAL;
+
+	len = total_params_length;
+	if (put_user(len, optlen))
+		return -EFAULT;
+	
+	hyquic_transport_param_for_each(cursor, &hyquic->transport_params_local) {
+		if (copy_to_user(pos, cursor->param, cursor->length))
+			return -EINVAL;
+		pos += cursor->length;
+	}
+	return 0;
+}
+
+static int hyquic_sock_get_transport_param_len(struct sock *sk, int len, char __user *optval, int __user *optlen)
+{
+	struct hyquic_adapter *hyquic = quic_hyquic(sk);
+	size_t total_params_length;
+
+	if (len < sizeof(size_t))
+		return -EINVAL;
+
+	len = sizeof(size_t);
+	total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_local);
+
+	if (put_user(len, optlen) || copy_to_user(optval, &total_params_length, len))
+		return -EFAULT;
+	return 0;
+}
+
 static int quic_getsockopt(struct sock *sk, int level, int optname,
 			   char __user *optval, int __user *optlen)
 {
@@ -1636,6 +1697,12 @@ static int quic_getsockopt(struct sock *sk, int level, int optname,
 		break;
 	case QUIC_SOCKOPT_CRYPTO_SECRET:
 		retval = quic_sock_get_crypto_secret(sk, len, optval, optlen);
+		break;
+	case HYQUIC_SOCKOPT_TRANSPORT_PARAM:
+		retval = hyquic_sock_get_transport_param(sk, len, optval, optlen);
+		break;
+	case HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN:
+		retval = hyquic_sock_get_transport_param_len(sk, len, optval, optlen);
 		break;
 	default:
 		retval = -ENOPROTOOPT;
