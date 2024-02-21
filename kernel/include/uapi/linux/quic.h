@@ -25,6 +25,7 @@ enum {
 enum quic_cmsg_type {
 	QUIC_STREAM_INFO,
 	QUIC_HANDSHAKE_INFO,
+	HYQUIC_INFO,
 };
 
 #define QUIC_STREAM_TYPE_SERVER_MASK	0x01
@@ -56,6 +57,22 @@ struct quic_stream_info {
 	uint64_t stream_id;
 	uint32_t stream_flag;
 };
+
+enum hyquic_info_type {
+	HYQUIC_INFO_RAW_FRAMES,
+}
+
+struct hyquic_info_raw_frames {
+	uint64_t seq_no_first_frame;
+}
+
+struct hyquic_info {
+	enum hyquic_info_type type;
+	uint64_t data_length;
+	union {
+		struct hyquic_info_raw_frames raw_frames;
+	}
+}
 
 enum quic_msg_flags {
 	MSG_NOTIFICATION	= 0x8000,

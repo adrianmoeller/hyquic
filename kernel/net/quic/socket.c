@@ -353,6 +353,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 	struct quic_stream_info *s = NULL;
 	struct quic_stream_table *streams;
 	struct cmsghdr *cmsg;
+	int err;
 
 	for_each_cmsghdr(cmsg, msg) {
 		if (!CMSG_OK(msg, cmsg))
@@ -375,6 +376,13 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 			s = CMSG_DATA(cmsg);
 			sinfo->stream_id = s->stream_id;
 			sinfo->stream_flag = s->stream_flag;
+			break;
+		case HYQUIC_INFO:
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_info)))
+				return -EINVAL;
+			err = hyquic_process_info(sk, msg, CMSG_DATA(cmsg));
+			if (err)
+				return err;
 			break;
 		default:
 			return -EINVAL;
