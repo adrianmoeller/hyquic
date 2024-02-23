@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_INPUT_H__
+#define __QUIC_INPUT_H__
+
 struct quic_inqueue {
 	struct sk_buff_head reassemble_list;
 	struct sk_buff_head handshake_list;
@@ -92,3 +95,5 @@ void quic_inq_get_param(struct sock *sk, struct quic_transport_param *p);
 void quic_inq_set_owner_r(struct sk_buff *skb, struct sock *sk);
 int quic_inq_event_recv(struct sock *sk, u8 event, void *args);
 int quic_inq_handshake_tail(struct sock *sk, struct sk_buff *skb);
+
+#endif /* __QUIC_INPUT_H__ */

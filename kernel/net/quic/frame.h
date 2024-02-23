@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_FRAME_H__
+#define __QUIC_FRAME_H__
+
 enum {
 	QUIC_FRAME_PADDING = 0x00,
 	QUIC_FRAME_PING = 0x01,
@@ -142,3 +145,5 @@ enum quic_transport_param_id {
 	QUIC_TRANSPORT_PARAM_GREASE_QUIC_BIT = 0x2ab2,
 	QUIC_TRANSPORT_PARAM_VERSION_INFORMATION = 0x11,
 };
+
+#endif /* __QUIC_FRAME_H__ */

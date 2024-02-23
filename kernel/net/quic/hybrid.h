@@ -1,6 +1,10 @@
+#ifndef __QUIC_HYBRID_H__
+#define __QUIC_HYBRID_H__
+
 #include <uapi/linux/quic.h>
 #include <linux/list.h>
 #include <linux/skbuff.h>
+#include "hashtable.h"
 
 struct hyquic_transport_param {
     struct list_head list;
@@ -33,3 +37,5 @@ inline void hyquic_transport_params_add(struct hyquic_transport_param *param, st
 size_t hyquic_transport_params_total_length(struct list_head *param_list);
 struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t length);
 int hyquic_process_info(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_info *info);
+
+#endif /* __QUIC_HYBRID_H__ */

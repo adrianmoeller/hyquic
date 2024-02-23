@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_CONNECTION_H__
+#define __QUIC_CONNECTION_H__
+
 struct quic_connection_id {
 	u8 len;
 	u8 data[20];
@@ -75,3 +78,5 @@ void quic_connection_id_set_param(struct quic_connection_id_set *id_set,
 				  struct quic_transport_param *p);
 void quic_connection_id_get_param(struct quic_connection_id_set *id_set,
 				  struct quic_transport_param *p);
+
+#endif /* __QUIC_CONNECTION_H__ */

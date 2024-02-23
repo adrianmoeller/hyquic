@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_NUMBER_H__
+#define __QUIC_NUMBER_H__
+
 union quic_num {
 	u8	u8;
 	u16	u16;
@@ -172,3 +175,5 @@ static inline s64 quic_get_num(s64 max_pkt_num, s64 pkt_num, u32 n)
 		return cand - win;
 	return cand;
 }
+
+#endif /* __QUIC_NUMBER_H__ */

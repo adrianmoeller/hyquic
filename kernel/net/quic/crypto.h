@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_CRYPTO_H__
+#define __QUIC_CRYPTO_H__
+
 #include <linux/crypto.h>
 
 struct quic_packet_info {
@@ -85,3 +88,5 @@ int quic_crypto_generate_token(struct quic_crypto *crypto, void *data, char *lab
 			       u8 *token, u32 len);
 int quic_crypto_generate_session_ticket_key(struct quic_crypto *crypto, void *data,
 					    u8 *key, u32 len);
+
+#endif /* __QUIC_CRYPTO_H__ */

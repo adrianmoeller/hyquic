@@ -8,6 +8,12 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_HASHTABLE_H__
+#define __QUIC_HASHTABLE_H__
+
+#include <net/inet_common.h>
+#include <net/inet_hashtables.h>
+
 struct quichdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8 pnl:2,
@@ -128,3 +134,5 @@ static inline struct quic_hash_head* hyquic_raw_frame_type_head(struct quic_hash
 {
 	return &ht->hash[frame_type & (ht->size - 1)];
 }
+
+#endif /* __QUIC_HASHTABLE_H__ */

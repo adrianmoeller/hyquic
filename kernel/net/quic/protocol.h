@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_PROTOCOL_H__
+#define __QUIC_PROTOCOL_H__
+
 extern struct percpu_counter quic_sockets_allocated;
 extern struct workqueue_struct *quic_wq;
 extern u8 random_data[16];
@@ -49,3 +52,5 @@ void quic_lower_xmit(struct sock *sk, struct sk_buff *skb, union quic_addr *da,
 		     union quic_addr *sa);
 int quic_flow_route(struct sock *sk, union quic_addr *da, union quic_addr *sa);
 struct quic_addr_family_ops *quic_af_ops_get(sa_family_t family);
+
+#endif /* __QUIC_PROTOCOL_H__ */

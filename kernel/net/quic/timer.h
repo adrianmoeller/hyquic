@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_TIMER_H__
+#define __QUIC_TIMER_H__
+
 #define QUIC_TIMER_RTX		0
 #define QUIC_TIMER_ACK		1
 #define QUIC_TIMER_IDLE		2
@@ -27,3 +30,5 @@ void quic_timer_start(struct sock *sk, u8 type);
 void quic_timer_stop(struct sock *sk, u8 type);
 void quic_timers_init(struct sock *sk);
 void quic_timers_free(struct sock *sk);
+
+#endif /* __QUIC_TIMER_H__ */

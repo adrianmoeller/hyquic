@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_PATH_H__
+#define __QUIC_PATH_H__
+
 #define QUIC_PATH_ALT_SRC	0x1
 #define QUIC_PATH_ALT_DST	0x2
 
@@ -94,3 +97,5 @@ int quic_path_pl_recv(struct quic_path_addr *a, bool *raise_timer, bool *complet
 int quic_path_pl_toobig(struct quic_path_addr *a, u32 pmtu, bool *reset_timer);
 void quic_path_pl_reset(struct quic_path_addr *a);
 bool quic_path_pl_confirm(struct quic_path_addr *a, s64 largest, s64 smallest);
+
+#endif /* __QUIC_PATH_H__ */

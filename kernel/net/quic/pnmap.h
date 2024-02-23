@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_PNMAP_H__
+#define __QUIC_PNMAP_H__
+
 #define QUIC_PN_MAX_GABS	128
 #define QUIC_PN_MAP_BASE_PN	0
 #define QUIC_PN_MAP_MAX_PN	((1ULL << 62) - 1)
@@ -96,3 +99,5 @@ int quic_pnmap_check(const struct quic_pnmap *map, s64 pn);
 int quic_pnmap_mark(struct quic_pnmap *map, s64 pn);
 void quic_pnmap_free(struct quic_pnmap *map);
 u16 quic_pnmap_num_gabs(struct quic_pnmap *map, struct quic_gap_ack_block *gabs);
+
+#endif /* __QUIC_PNMAP_H__ */

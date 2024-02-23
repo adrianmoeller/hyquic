@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_PACKET_H__
+#define __QUIC_PACKET_H__
+
 struct quic_packet {
 	struct sk_buff_head frame_list;
 	struct sk_buff *head;
@@ -77,3 +80,5 @@ int quic_packet_retry_transmit(struct sock *sk, struct quic_request_sock *req);
 int quic_packet_version_transmit(struct sock *sk, struct quic_request_sock *req);
 int quic_packet_stateless_reset_transmit(struct sock *sk, struct quic_request_sock *req);
 void quic_packet_mss_update(struct sock *sk, int mss);
+
+#endif /* __QUIC_PACKET_H__ */

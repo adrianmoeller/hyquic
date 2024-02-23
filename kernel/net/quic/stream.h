@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_STREAM_H__
+#define __QUIC_STREAM_H__
+
 #define QUIC_STREAM_BIT_FIN	0x01
 #define QUIC_STREAM_BIT_LEN	0x02
 #define QUIC_STREAM_BIT_OFF	0x04
@@ -74,3 +77,5 @@ struct quic_stream *quic_stream_recv_get(struct quic_stream_table *streams, u64 
 					 bool is_serv);
 struct quic_stream *quic_stream_find(struct quic_stream_table *streams, u64 stream_id);
 bool quic_stream_id_exceeds(struct quic_stream_table *streams, u64 stream_id);
+
+#endif /* __QUIC_STREAM_H__ */

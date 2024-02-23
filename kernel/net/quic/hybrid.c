@@ -1,4 +1,6 @@
 #include <linux/slab.h>
+#include "number.h"
+#include "socket.h"
 #include "hybrid.h"
 
 static int hyquic_raw_frame_types_init(struct quic_hash_table *raw_frame_types)

@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_OUTPUT_H__
+#define __QUIC_OUTPUT_H__
+
 struct quic_outqueue {
 	struct quic_connection_id orig_dcid;
 	struct sk_buff_head retransmit_list;
@@ -117,3 +120,5 @@ void quic_outq_stream_purge(struct sock *sk, struct quic_stream *stream);
 void quic_outq_set_param(struct sock *sk, struct quic_transport_param *p);
 void quic_outq_get_param(struct sock *sk, struct quic_transport_param *p);
 void quic_outq_transmit_probe(struct sock *sk);
+
+#endif /* __QUIC_OUTPUT_H__ */

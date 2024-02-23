@@ -8,6 +8,9 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __QUIC_CONG_H__
+#define __QUIC_CONG_H__
+
 #define QUIC_RTT_INIT		333000
 #define QUIC_RTO_MIN		100000
 #define QUIC_RTO_MAX		6000000
@@ -49,3 +52,5 @@ void quic_cong_cwnd_update(struct sock *sk, u32 window);
 void quic_cong_cwnd_update_after_timeout(struct sock *sk, s64 packet_number, u32 transmit_ts);
 void quic_cong_cwnd_update_after_sack(struct sock *sk, s64 acked_number, u32 transmit_ts,
 				      u32 acked_bytes);
+
+#endif /* __QUIC_CONG_H__ */
