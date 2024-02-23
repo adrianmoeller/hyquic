@@ -138,9 +138,33 @@ static void quic_outq_transmit_data(struct sock *sk)
 	}
 }
 
+static void hyquic_outq_transmit_raw(struct sock *sk)
+{
+	struct sk_buff_head *head = &quic_hyquic(sk)->raw_frames_outqueue;
+	u8 level = quic_outq(sk)->level;
+	struct sk_buff *skb;
+
+	if (!quic_crypto(sk, level)->send_ready)
+		return;
+
+	skb = __skb_dequeue(head);
+	if (!skb)
+		return;
+	quic_packet_config(sk, level, 0);
+	while(skb) {
+		if (!quic_packet_tail(sk, skb, 0)) {
+			quic_packet_build(sk);
+			quic_packet_config(sk, level, 0);
+			WARN_ON_ONCE(!quic_packet_tail(sk, skb, 0));
+		}
+		skb = __skb_dequeue(head);
+	}
+}
+
 void quic_outq_flush(struct sock *sk)
 {
 	quic_outq_transmit_ctrl(sk);
+	hyquic_outq_transmit_raw(sk);
 
 	if (!quic_outq_transmit_dgram(sk))
 		quic_outq_transmit_data(sk);
@@ -237,6 +261,16 @@ void quic_outq_rtx_tail(struct sock *sk, struct sk_buff *skb)
 		}
 	}
 	__skb_queue_tail(head, skb);
+}
+
+void hyquic_outq_raw_tail(struct sock *sk, struct sk_buff *skb, bool cork)
+{
+	struct sk_buff_head *head = &quic_hyquic(sk)->raw_frames_outqueue;
+
+	__skb_queue_tail(head, skb);
+
+	if (!cork)
+		quic_outq_flush(sk);
 }
 
 void quic_outq_transmit_probe(struct sock *sk)

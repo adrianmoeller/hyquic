@@ -9,6 +9,7 @@ void hyquic_init(struct hyquic_adapter *hyquic)
     INIT_LIST_HEAD(&hyquic->transport_params_local);
 
     hyquic->next_user_frame_seq_no = 0;
+    skb_queue_head_init(hyquic->raw_frames_outqueue);
 }
 
 static void hyquic_transport_params_free(struct list_head *param_list)
@@ -54,7 +55,7 @@ struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t 
     return param;
 }
 
-struct sk_buff* quic_frame_create_raw(struct sock *sk, void **pdata, uint64_t *pdata_length)
+struct sk_buff* hyquic_frame_create_raw(void **pdata, uint64_t *pdata_length)
 {
     uint64_t frame_length;
     struct sk_buff *skb;
@@ -75,9 +76,18 @@ struct sk_buff* quic_frame_create_raw(struct sock *sk, void **pdata, uint64_t *p
 
 static int hyquic_process_info_raw_frames(struct sock *sk, void *data, uint64_t data_length, struct hyquic_info_raw_frames *info)
 {
+    struct sk_buff *skb;
+
+    if (!quic_is_established(sk))
+        return -EINVAL;
+
     while (data_length)
     {
-        // TODO continue
+        skb = hyquic_frame_create_raw(&data, &data_length);
+        if (!skb)
+            return -EINVAL;
+
+        hyquic_outq_raw_tail(sk, skb, false);
     }
 }
 

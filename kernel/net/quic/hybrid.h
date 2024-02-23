@@ -13,6 +13,7 @@ struct hyquic_adapter {
     struct list_head transport_params_local;
 
     uint64_t next_user_frame_seq_no;
+    struct sk_buff_head raw_frames_outqueue;
     
 };
 
