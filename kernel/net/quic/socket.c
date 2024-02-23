@@ -182,7 +182,8 @@ static int quic_init_sock(struct sock *sk)
 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 	local_bh_enable();
 
-	hyquic_init(quic_hyquic(sk));
+	if (hyquic_init(quic_hyquic(sk)))
+		return -ENOMEM;
 
 	return 0;
 }
@@ -380,7 +381,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 		case HYQUIC_INFO:
 			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_info)))
 				return -EINVAL;
-			err = hyquic_process_info(sk, msg, CMSG_DATA(cmsg));
+			err = hyquic_process_info(sk, &msg->msg_iter, CMSG_DATA(cmsg));
 			if (err)
 				return err;
 			break;

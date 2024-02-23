@@ -123,3 +123,8 @@ static inline struct quic_hash_head *quic_stream_head(struct quic_hash_table *ht
 {
 	return &ht->hash[stream_id & (ht->size - 1)];
 }
+
+static inline struct quic_hash_head* hyquic_raw_frame_type_head(struct quic_hash_table *ht, u_int64_t frame_type)
+{
+	return &ht->hash[frame_type & (ht->size - 1)];
+}

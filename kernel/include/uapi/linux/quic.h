@@ -60,19 +60,19 @@ struct quic_stream_info {
 
 enum hyquic_info_type {
 	HYQUIC_INFO_RAW_FRAMES,
-}
+};
 
 struct hyquic_info_raw_frames {
 	uint64_t seq_no_first_frame;
-}
+};
 
 struct hyquic_info {
 	enum hyquic_info_type type;
-	uint64_t data_length;
+	uint32_t data_length;
 	union {
 		struct hyquic_info_raw_frames raw_frames;
-	}
-}
+	};
+};
 
 enum quic_msg_flags {
 	MSG_NOTIFICATION	= 0x8000,
