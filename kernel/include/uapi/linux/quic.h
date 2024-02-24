@@ -131,6 +131,11 @@ struct quic_transport_param {
 	uint32_t	version;
 };
 
+struct hyquic_frame_details {
+	uint64_t frame_type;
+	size_t fixed_length;
+};
+
 struct quic_crypto_secret {
 	uint8_t level; /* crypto level */
 	uint16_t send; /* send or recv */

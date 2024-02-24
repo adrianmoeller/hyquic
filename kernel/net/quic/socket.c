@@ -1324,17 +1324,32 @@ static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t
 {
 	struct hyquic_adapter *hyquic = quic_hyquic(sk);
 	struct hyquic_transport_param *entry;
-	void *param;
+	void *param_data;
+	uint32_t param_data_length;
+	struct hyquic_frame_details *frame_details;
+	size_t num_frame_details;
+	void *p = data;
+	int i;
 
 	hyquic->enabled = true;
 
-	param = kmemdup(data, length, GFP_KERNEL);
-	if (!param)
+	num_frame_details = *((size_t*) p);
+	p += sizeof(size_t);
+	for (i = 0; i < num_frame_details; i++) {
+		frame_details = p;
+		hyquic_raw_frame_type_create(hyquic, frame_details->frame_type, frame_details->fixed_length);
+		p += sizeof(struct hyquic_frame_details);
+	}
+
+	param_data_length = length - (p - data);
+	param_data = kmemdup(p, param_data_length, GFP_KERNEL);
+	if (!param_data)
 		return -ENOMEM;
-	entry = hyquic_transport_param_create(param, length);
+	entry = hyquic_transport_param_create(param_data, length);
 	if (!entry)
 		return -ENOMEM;
 	hyquic_transport_params_add(entry, &hyquic->transport_params_local);
+
 	return 0;
 }
 

@@ -37,5 +37,7 @@ inline void hyquic_transport_params_add(struct hyquic_transport_param *param, st
 size_t hyquic_transport_params_total_length(struct list_head *param_list);
 struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t length);
 int hyquic_process_info(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_info *info);
+struct hyquic_raw_frame_type* hyquic_raw_frame_type_create(struct hyquic_adapter *hyquic, uint64_t frame_type, size_t fixed_length);
+struct hyquic_raw_frame_type* hyquic_raw_frame_type_get(struct hyquic_adapter *hyquic, uint64_t frame_type);
 
 #endif /* __QUIC_HYBRID_H__ */

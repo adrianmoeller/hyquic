@@ -38,7 +38,20 @@ int hyquic_init(struct hyquic_adapter *hyquic)
 
 static void hyquic_raw_frame_types_free(struct quic_hash_table *raw_frame_types)
 {
-    // TODO
+    struct quic_hash_head *head;
+    struct hyquic_raw_frame_type *raw_frame_type;
+    struct hlist_node *tmp;
+    int i;
+
+    for (i = 0; i < raw_frame_types->size; i++)
+    {
+        head = &raw_frame_types->hash[i];
+        hlist_for_each_entry_safe(raw_frame_type, tmp, &head->head, node) {
+            hlist_del_init(&raw_frame_type->node);
+            kfree(raw_frame_type);
+        }
+    }
+    kfree(raw_frame_types->hash);
 }
 
 static void hyquic_transport_params_free(struct list_head *param_list)
@@ -169,4 +182,17 @@ struct hyquic_raw_frame_type* hyquic_raw_frame_type_create(struct hyquic_adapter
     head = hyquic_raw_frame_type_head(&hyquic->raw_frame_types, frame_type);
     hlist_add_head(&raw_frame_type->node, &head->head);
     return raw_frame_type;
+}
+
+struct hyquic_raw_frame_type* hyquic_raw_frame_type_get(struct hyquic_adapter *hyquic, uint64_t frame_type)
+{
+    struct quic_hash_head *head = hyquic_raw_frame_type_head(&hyquic->raw_frame_types, frame_type);
+    struct hyquic_raw_frame_type *cursor;
+
+    hlist_for_each_entry(cursor, &head->head, node) {
+        if (cursor->frame_type == frame_type)
+            return cursor;
+    }
+
+    return NULL;
 }
