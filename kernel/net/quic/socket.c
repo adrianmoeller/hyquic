@@ -1329,7 +1329,7 @@ static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t
 	struct hyquic_frame_details *frame_details;
 	size_t num_frame_details;
 	void *p = data;
-	int i;
+	int i, err;
 
 	hyquic->enabled = true;
 
@@ -1337,7 +1337,9 @@ static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t
 	p += sizeof(size_t);
 	for (i = 0; i < num_frame_details; i++) {
 		frame_details = p;
-		hyquic_raw_frame_type_create(hyquic, frame_details->frame_type, frame_details->fixed_length);
+		err = hyquic_frame_details_create(hyquic, frame_details);
+		if (err)
+			return err;
 		p += sizeof(struct hyquic_frame_details);
 	}
 

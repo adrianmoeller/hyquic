@@ -1293,6 +1293,7 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 {
 	int ret, len = pki->length;
 	u8 type;
+	struct hyquic_frame_details *frame_details;
 
 	if (!len)
 		return -EINVAL;
@@ -1301,6 +1302,14 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 		type = *(u8 *)(skb->data);
 		skb_pull(skb, 1);
 		len--;
+
+		frame_details = hyquic_frame_details_get(quic_hyquic(sk), type);
+		if (frame_details) {
+			ret = hyquic_process_frame(sk, skb, pki, frame_details);
+			if (ret)
+				return ret;
+			goto end;
+		}
 
 		if (type > QUIC_FRAME_MAX) {
 			pr_err_once("[QUIC] %s unsupported frame %x\n", __func__, type);
@@ -1324,6 +1333,7 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 		if (quic_frame_non_probing(type))
 			pki->non_probing = 1;
 
+	end:
 		skb_pull(skb, ret);
 		len -= ret;
 	}

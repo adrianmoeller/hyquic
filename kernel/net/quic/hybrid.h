@@ -20,13 +20,8 @@ struct hyquic_adapter {
 
     uint64_t next_user_frame_seq_no;
     struct sk_buff_head raw_frames_outqueue;
-    struct quic_hash_table raw_frame_types;
-};
-
-struct hyquic_raw_frame_type {
-    struct hlist_node node;
-    uint64_t frame_type;
-    size_t fixed_length;
+    struct quic_hash_table frame_details_table;
+    struct sk_buff_head frames_inqueue;
 };
 
 #define hyquic_transport_param_for_each(pos, head) list_for_each_entry((pos), (head), list)
@@ -37,7 +32,8 @@ inline void hyquic_transport_params_add(struct hyquic_transport_param *param, st
 size_t hyquic_transport_params_total_length(struct list_head *param_list);
 struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t length);
 int hyquic_process_info(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_info *info);
-struct hyquic_raw_frame_type* hyquic_raw_frame_type_create(struct hyquic_adapter *hyquic, uint64_t frame_type, size_t fixed_length);
-struct hyquic_raw_frame_type* hyquic_raw_frame_type_get(struct hyquic_adapter *hyquic, uint64_t frame_type);
+int hyquic_frame_details_create(struct hyquic_adapter *hyquic, struct hyquic_frame_details *frame_details);
+struct hyquic_frame_details* hyquic_frame_details_get(struct hyquic_adapter *hyquic, uint64_t frame_type);
+int hyquic_process_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, struct hyquic_frame_details *frame_details);
 
 #endif /* __QUIC_HYBRID_H__ */

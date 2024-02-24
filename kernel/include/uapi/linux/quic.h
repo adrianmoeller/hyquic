@@ -134,6 +134,9 @@ struct quic_transport_param {
 struct hyquic_frame_details {
 	uint64_t frame_type;
 	size_t fixed_length;
+	bool ack_eliciting:1;
+	bool ack_immidiate:1;
+	bool non_probing:1;
 };
 
 struct quic_crypto_secret {
