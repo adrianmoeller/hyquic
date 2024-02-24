@@ -1,6 +1,8 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "netinet/quic.h"
 
 int hyquic_set_transport_parameter(int sockfd, const void *param, size_t param_length, struct hyquic_frame_details *frame_details, size_t num_frame_details)
@@ -9,7 +11,7 @@ int hyquic_set_transport_parameter(int sockfd, const void *param, size_t param_l
     size_t data_length = sizeof(size_t) + frame_details_length + param_length;
     void *data = malloc(data_length);
     uint8_t *p = data;
-    int i, err;
+    int err;
 
     memcpy(p, &num_frame_details, sizeof(size_t));
     p += sizeof(size_t);
