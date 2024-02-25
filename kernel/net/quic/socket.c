@@ -648,6 +648,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 	int err, copy, copied = 0, freed = 0;
 	struct quic_stream_info sinfo = {};
 	int fin, off, event, dgram, level;
+	struct hyquic_rcv_cb *hyquic_rcv_cb;
 	struct quic_rcv_cb *rcv_cb;
 	struct quic_stream *stream;
 	struct sk_buff *skb;
@@ -684,6 +685,8 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 			msg->msg_flags |= MSG_DATAGRAM;
 			sinfo.stream_flag |= QUIC_STREAM_FLAG_DATAGRAM;
 		} else if (!stream) {
+			hyquic_rcv_cb = HYQUIC_RCV_CB(skb);
+			pr_info("<<HYQUIC>> cb: %u\n", hyquic_rcv_cb->hyquic_data);
 			hinfo.crypto_level = level;
 			put_cmsg(msg, IPPROTO_QUIC, QUIC_HANDSHAKE_INFO, sizeof(hinfo), &hinfo);
 		}
@@ -1333,7 +1336,7 @@ static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t
 	void *p = data;
 	int i, err;
 
-	hyquic->enabled = true;
+	hyquic_enable(sk);
 
 	num_frame_details = *((size_t*) p);
 	p += sizeof(size_t);
@@ -1650,7 +1653,7 @@ static int hyquic_sock_get_transport_param(struct sock *sk, int len, char __user
 	char __user *pos = optval;
 	struct hyquic_transport_param *cursor;
 
-	hyquic->enabled = true;
+	hyquic_enable(sk);
 
 	if (len < total_params_length)
 		return -EINVAL;
@@ -1672,7 +1675,7 @@ static int hyquic_sock_get_transport_param_len(struct sock *sk, int len, char __
 	struct hyquic_adapter *hyquic = quic_hyquic(sk);
 	size_t total_params_length;
 
-	hyquic->enabled = true;
+	hyquic_enable(sk);
 
 	if (len < sizeof(size_t))
 		return -EINVAL;

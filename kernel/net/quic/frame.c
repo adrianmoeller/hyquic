@@ -1339,6 +1339,9 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 		skb_pull(skb, ret);
 		len -= ret;
 	}
+
+	hyquic_flush_processed_frames(sk);
+
 	return 0;
 }
 

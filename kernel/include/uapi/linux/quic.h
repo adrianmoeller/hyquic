@@ -59,7 +59,10 @@ struct quic_stream_info {
 };
 
 enum hyquic_info_type {
+	HYQUIC_INFO_NONE,
 	HYQUIC_INFO_RAW_FRAMES,
+	HYQUIC_INFO_RAW_FRAMES_FIX,
+	HYQUIC_INFO_RAW_FRAMES_VAR,
 };
 
 struct hyquic_info_raw_frames {
@@ -134,9 +137,9 @@ struct quic_transport_param {
 struct hyquic_frame_details {
 	uint64_t frame_type;
 	size_t fixed_length;
-	bool ack_eliciting:1;
-	bool ack_immidiate:1;
-	bool non_probing:1;
+	uint8_t ack_eliciting:1;
+	uint8_t ack_immidiate:1;
+	uint8_t non_probing:1;
 };
 
 struct quic_crypto_secret {
@@ -175,6 +178,7 @@ enum quic_event_type {
 	QUIC_EVENT_CONNECTION_MIGRATION,
 	QUIC_EVENT_KEY_UPDATE,
 	QUIC_EVENT_NEW_TOKEN,
+	QUIC_EVENT_HYQUIC_DATA,
 	QUIC_EVENT_END,
 	QUIC_EVENT_MAX = QUIC_EVENT_END - 1,
 };

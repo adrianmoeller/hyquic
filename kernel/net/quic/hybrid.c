@@ -8,6 +8,16 @@ struct hyquic_frame_details_entry {
     struct hyquic_frame_details details;
 };
 
+void hyquic_enable(struct sock *sk)
+{
+    struct hyquic_adapter *hyquic = quic_hyquic(sk);
+
+    if (hyquic->enabled)
+        return;
+    hyquic->enabled = true;
+    quic_inq(sk)->events |=  (1 << QUIC_EVENT_HYQUIC_DATA);
+}
+
 static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details_table)
 {
     struct quic_hash_head *head;
@@ -209,12 +219,12 @@ int hyquic_process_frame(struct sock *sk, struct sk_buff *skb, struct quic_packe
     } else {
         if (frame_details->fixed_length > skb->len)
             return -EINVAL;
-        fskb = alloc_skb(quic_var_len(frame_details->frame_type) + frame_details->fixed_length);
+        fskb = alloc_skb(quic_var_len(frame_details->frame_type) + frame_details->fixed_length, GFP_ATOMIC);
         if (!fskb)
             return -ENOMEM;
         p = quic_put_var(fskb->data, frame_details->frame_type);
         p = quic_put_data(p, skb->data, frame_details->fixed_length);
-        __skb_queue_tail(quic_hyquic(sk)->frames_inqueue, fskb);
+        __skb_queue_tail(&quic_hyquic(sk)->frames_inqueue, fskb);
         ret = frame_details->fixed_length;
     }
 
@@ -227,4 +237,35 @@ int hyquic_process_frame(struct sock *sk, struct sk_buff *skb, struct quic_packe
         pki->non_probing = 1;
 
     return ret;
+}
+
+int hyquic_flush_processed_frames(struct sock *sk)
+{
+    struct sk_buff_head *head = &quic_hyquic(sk)->frames_inqueue;
+    struct sk_buff *skb, *fskb;
+    struct hyquic_rcv_cb *rcv_cb;
+    size_t length = 0;
+
+    if (skb_queue_empty(head))
+        return 0;
+
+    skb_queue_walk(head, fskb) {
+        length += fskb->len;
+    }
+
+    skb = alloc_skb(length, GFP_ATOMIC);
+    if (!skb)
+        return -ENOMEM;
+    fskb = __skb_dequeue(head);
+    while (fskb) {
+        skb_put_data(skb, fskb->data, fskb->len);
+        fskb = __skb_dequeue(head);
+    }
+
+    rcv_cb = HYQUIC_RCV_CB(skb);
+    rcv_cb->hyquic_data = HYQUIC_INFO_RAW_FRAMES_FIX;
+    memset(&rcv_cb->common, 0, sizeof(rcv_cb->common));
+
+    sk->sk_data_ready(sk);
+    return 0;
 }
