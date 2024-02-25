@@ -48,8 +48,7 @@ static void hyquic_frame_details_table_free(struct quic_hash_table *frame_detail
     struct hlist_node *tmp;
     int i;
 
-    for (i = 0; i < frame_details_table->size; i++)
-    {
+    for (i = 0; i < frame_details_table->size; i++) {
         head = &frame_details_table->hash[i];
         hlist_for_each_entry_safe(raw_frame_type, tmp, &head->head, node) {
             hlist_del_init(&raw_frame_type->node);
@@ -132,8 +131,7 @@ static int hyquic_process_info_raw_frames(struct sock *sk, uint8_t *data, uint32
     if (!quic_is_established(sk))
         return -EINVAL;
 
-    while (data_length)
-    {
+    while (data_length) {
         skb = hyquic_frame_create_raw(&data, &data_length);
         if (!skb)
             return -EINVAL;
@@ -148,8 +146,7 @@ int hyquic_process_info(struct sock *sk, struct iov_iter *msg_iter, struct hyqui
     int err = 0;
     uint8_t *data = (uint8_t*) kmalloc_array(info->data_length, sizeof(uint8_t), GFP_KERNEL);
 
-    if (iov_iter_count(msg_iter) < info->data_length)
-    {
+    if (iov_iter_count(msg_iter) < info->data_length) {
         err = -EINVAL;
         goto out;
     }
@@ -157,8 +154,7 @@ int hyquic_process_info(struct sock *sk, struct iov_iter *msg_iter, struct hyqui
     if (!copy_from_iter_full(data, info->data_length, msg_iter))
         goto out;
 
-    switch (info->type)
-    {
+    switch (info->type) {
     case HYQUIC_INFO_RAW_FRAMES:
         err = hyquic_process_info_raw_frames(sk, data, info->data_length, &info->raw_frames);
         break;

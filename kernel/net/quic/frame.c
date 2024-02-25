@@ -1303,12 +1303,14 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 		skb_pull(skb, 1);
 		len--;
 
-		frame_details = hyquic_frame_details_get(quic_hyquic(sk), type);
-		if (frame_details) {
-			ret = hyquic_process_frame(sk, skb, pki, frame_details);
-			if (ret)
-				return ret;
-			goto end;
+		if (quic_hyquic(sk)->enabled) {
+			frame_details = hyquic_frame_details_get(quic_hyquic(sk), type);
+			if (frame_details) {
+				ret = hyquic_process_frame(sk, skb, pki, frame_details);
+				if (ret)
+					return ret;
+				goto end;
+			}
 		}
 
 		if (type > QUIC_FRAME_MAX) {
@@ -1474,18 +1476,7 @@ int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_p
 			p += valuelen;
 			break;
 		default:
-			if (!quic_hyquic(sk)->enabled)
-			{
-				/* Ignore unknown parameter */
-				if (!quic_get_var(&p, &len, &valuelen))
-					return -1;
-				if (len < valuelen)
-					return -1;
-				len -= valuelen;
-				p += valuelen;
-			}
-			else
-			{
+			if (!quic_hyquic(sk)->enabled) {
 				uint32_t type_length = quic_var_len(type);
 				uint8_t *tp_start = p - type_length;
 				size_t tp_length;
@@ -1502,7 +1493,16 @@ int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_p
 				if (!entry)
 					return -ENOMEM;
 				hyquic_transport_params_add(entry, &quic_hyquic(sk)->transport_params_remote);
+				break;
 			}
+
+			/* Ignore unknown parameter */
+			if (!quic_get_var(&p, &len, &valuelen))
+				return -1;
+			if (len < valuelen)
+				return -1;
+			len -= valuelen;
+			p += valuelen;
 			break;
 		}
 	}

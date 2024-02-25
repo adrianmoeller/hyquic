@@ -379,6 +379,8 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 			sinfo->stream_flag = s->stream_flag;
 			break;
 		case HYQUIC_INFO:
+			if (!quic_hyquic(sk)->enabled)
+				return -EINVAL;
 			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_info)))
 				return -EINVAL;
 			err = hyquic_process_info(sk, &msg->msg_iter, CMSG_DATA(cmsg));
