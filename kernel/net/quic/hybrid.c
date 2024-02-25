@@ -200,12 +200,22 @@ struct hyquic_frame_details* hyquic_frame_details_get(struct hyquic_adapter *hyq
 
 int hyquic_process_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, struct hyquic_frame_details *frame_details)
 {
+    struct sk_buff *fskb;
+    uint8_t *p;
     int ret = 0;
 
     if (frame_details->fixed_length < 0) {
         // TODO handle var length frame
     } else {
-        // TODO handle fixed length frame
+        if (frame_details->fixed_length > skb->len)
+            return -EINVAL;
+        fskb = alloc_skb(quic_var_len(frame_details->frame_type) + frame_details->fixed_length);
+        if (!fskb)
+            return -ENOMEM;
+        p = quic_put_var(fskb->data, frame_details->frame_type);
+        p = quic_put_data(p, skb->data, frame_details->fixed_length);
+        __skb_queue_tail(quic_hyquic(sk)->frames_inqueue, fskb);
+        ret = frame_details->fixed_length;
     }
 
     if (frame_details->ack_eliciting) {
