@@ -41,11 +41,11 @@ int hyquic_init(struct hyquic_adapter *hyquic)
     INIT_LIST_HEAD(&hyquic->transport_params_remote);
     INIT_LIST_HEAD(&hyquic->transport_params_local);
 
-    hyquic->next_user_frame_seq_no = 0;
-    skb_queue_head_init(&hyquic->raw_frames_outqueue);
+    hyquic->next_usrquic_frame_seq_no = 0;
+    skb_queue_head_init(&hyquic->usrquic_frames_outqueue);
     if (hyquic_frame_details_table_init(&hyquic->frame_details_table))
         return -ENOMEM;
-    skb_queue_head_init(&hyquic->frames_inqueue);
+    skb_queue_head_init(&hyquic->unkwn_frames_inqueue);
 
     return 0;
 }
@@ -83,9 +83,9 @@ void hyquic_free(struct hyquic_adapter *hyquic)
     hyquic_transport_params_free(&hyquic->transport_params_remote);
     hyquic_transport_params_free(&hyquic->transport_params_local);
 
-    __skb_queue_purge(&hyquic->raw_frames_outqueue);
+    __skb_queue_purge(&hyquic->usrquic_frames_outqueue);
     hyquic_frame_details_table_free(&hyquic->frame_details_table);
-    __skb_queue_purge(&hyquic->frames_inqueue);
+    __skb_queue_purge(&hyquic->unkwn_frames_inqueue);
 }
 
 inline void hyquic_transport_params_add(struct hyquic_transport_param *param, struct list_head *param_list)
@@ -133,7 +133,7 @@ struct sk_buff* hyquic_frame_create_raw(uint8_t **pdata, uint32_t *pdata_length)
     return skb;
 }
 
-static int hyquic_process_info_raw_frames(struct sock *sk, uint8_t *data, uint32_t data_length, struct hyquic_info_raw_frames *info)
+static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_t data_length, struct hyquic_data_raw_frames *info)
 {
     struct sk_buff *skb;
 
@@ -150,7 +150,7 @@ static int hyquic_process_info_raw_frames(struct sock *sk, uint8_t *data, uint32
     return 0;
 }
 
-int hyquic_process_info(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_info *info)
+int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_data_info *info)
 {
     int err = 0;
     uint8_t *data = (uint8_t*) kmalloc_array(info->data_length, sizeof(uint8_t), GFP_KERNEL);
@@ -164,8 +164,8 @@ int hyquic_process_info(struct sock *sk, struct iov_iter *msg_iter, struct hyqui
         goto out;
 
     switch (info->type) {
-    case HYQUIC_INFO_RAW_FRAMES:
-        err = hyquic_process_info_raw_frames(sk, data, info->data_length, &info->raw_frames);
+    case HYQUIC_DATA_RAW_FRAMES:
+        err = hyquic_process_usrquic_frames(sk, data, info->data_length, &info->raw_frames);
         break;
     default:
         err = -EINVAL;
@@ -207,7 +207,7 @@ struct hyquic_frame_details* hyquic_frame_details_get(struct hyquic_adapter *hyq
     return NULL;
 }
 
-int hyquic_process_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, struct hyquic_frame_details *frame_details)
+int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, struct hyquic_frame_details *frame_details)
 {
     struct sk_buff *fskb;
     uint8_t *p;
@@ -223,7 +223,7 @@ int hyquic_process_frame(struct sock *sk, struct sk_buff *skb, struct quic_packe
             return -ENOMEM;
         p = quic_put_var(fskb->data, frame_details->frame_type);
         p = quic_put_data(p, skb->data, frame_details->fixed_length);
-        __skb_queue_tail(&quic_hyquic(sk)->frames_inqueue, fskb);
+        __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_inqueue, fskb);
         ret = frame_details->fixed_length;
     }
 
@@ -238,9 +238,9 @@ int hyquic_process_frame(struct sock *sk, struct sk_buff *skb, struct quic_packe
     return ret;
 }
 
-int hyquic_flush_processed_frames(struct sock *sk)
+int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
 {
-    struct sk_buff_head *head = &quic_hyquic(sk)->frames_inqueue;
+    struct sk_buff_head *head = &quic_hyquic(sk)->unkwn_frames_inqueue;
     struct sk_buff *skb, *fskb;
     struct hyquic_rcv_cb *rcv_cb;
     size_t length = 0;
@@ -262,7 +262,7 @@ int hyquic_flush_processed_frames(struct sock *sk)
     }
 
     rcv_cb = HYQUIC_RCV_CB(skb);
-    rcv_cb->hyquic_data = HYQUIC_INFO_RAW_FRAMES_FIX;
+    rcv_cb->hyquic_data = HYQUIC_DATA_RAW_FRAMES_FIX;
     memset(&rcv_cb->common, 0, sizeof(rcv_cb->common));
 
     sk->sk_data_ready(sk);

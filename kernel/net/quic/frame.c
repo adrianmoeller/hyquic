@@ -1306,7 +1306,7 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 		if (quic_hyquic(sk)->enabled) {
 			frame_details = hyquic_frame_details_get(quic_hyquic(sk), type);
 			if (frame_details) {
-				ret = hyquic_process_frame(sk, skb, pki, frame_details);
+				ret = hyquic_process_unkwn_frame(sk, skb, pki, frame_details);
 				if (ret)
 					return ret;
 				goto end;
@@ -1340,7 +1340,7 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 		len -= ret;
 	}
 
-	hyquic_flush_processed_frames(sk);
+	hyquic_flush_unkwn_frames_inqueue(sk);
 
 	return 0;
 }

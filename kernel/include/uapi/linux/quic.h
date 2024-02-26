@@ -58,22 +58,22 @@ struct quic_stream_info {
 	uint32_t stream_flag;
 };
 
-enum hyquic_info_type {
-	HYQUIC_INFO_NONE,
-	HYQUIC_INFO_RAW_FRAMES,
-	HYQUIC_INFO_RAW_FRAMES_FIX,
-	HYQUIC_INFO_RAW_FRAMES_VAR,
+enum hyquic_data_type {
+	HYQUIC_DATA_NONE,
+	HYQUIC_DATA_RAW_FRAMES,
+	HYQUIC_DATA_RAW_FRAMES_FIX,
+	HYQUIC_DATA_RAW_FRAMES_VAR,
 };
 
-struct hyquic_info_raw_frames {
+struct hyquic_data_raw_frames {
 	uint64_t seq_no_first_frame;
 };
 
-struct hyquic_info {
-	enum hyquic_info_type type;
+struct hyquic_data_info {
+	enum hyquic_data_type type;
 	uint32_t data_length;
 	union {
-		struct hyquic_info_raw_frames raw_frames;
+		struct hyquic_data_raw_frames raw_frames;
 		uint8_t incompl;
 	};
 };

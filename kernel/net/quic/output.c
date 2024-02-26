@@ -140,7 +140,7 @@ static void quic_outq_transmit_data(struct sock *sk)
 
 static void hyquic_outq_transmit_raw(struct sock *sk)
 {
-	struct sk_buff_head *head = &quic_hyquic(sk)->raw_frames_outqueue;
+	struct sk_buff_head *head = &quic_hyquic(sk)->usrquic_frames_outqueue;
 	u8 level = quic_outq(sk)->level;
 	struct sk_buff *skb;
 
@@ -265,7 +265,7 @@ void quic_outq_rtx_tail(struct sock *sk, struct sk_buff *skb)
 
 void hyquic_outq_raw_tail(struct sock *sk, struct sk_buff *skb, bool cork)
 {
-	struct sk_buff_head *head = &quic_hyquic(sk)->raw_frames_outqueue;
+	struct sk_buff_head *head = &quic_hyquic(sk)->usrquic_frames_outqueue;
 
 	__skb_queue_tail(head, skb);
 

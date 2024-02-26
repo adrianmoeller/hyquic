@@ -381,9 +381,9 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 		case HYQUIC_INFO:
 			if (!quic_hyquic(sk)->enabled)
 				return -EINVAL;
-			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_info)))
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_data_info)))
 				return -EINVAL;
-			err = hyquic_process_info(sk, &msg->msg_iter, CMSG_DATA(cmsg));
+			err = hyquic_process_usrquic_data(sk, &msg->msg_iter, CMSG_DATA(cmsg));
 			if (err)
 				return err;
 			break;
@@ -648,7 +648,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 	int err, copy, copied = 0, freed = 0;
 	struct quic_stream_info sinfo = {};
 	int fin, off, event, dgram, level;
-	struct hyquic_info hyquic_data_info = {};
+	struct hyquic_data_info hyquic_data_info = {};
 	struct hyquic_rcv_cb *hyquic_rcv_cb;
 	struct quic_rcv_cb *rcv_cb;
 	struct quic_stream *stream;
