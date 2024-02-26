@@ -1333,6 +1333,17 @@ static int quic_sock_set_connection_close(struct sock *sk, struct quic_connectio
 	return 0;
 }
 
+static int hyquic_sock_set_options(struct sock *sk, struct hyquic_options *options, uint32_t length)
+{
+	struct hyquic_adapter *hyquic = quic_hyquic(sk);
+	
+	if (length != sizeof(*options))
+		return -EINVAL;
+	
+	hyquic->options = *options;
+	return 0;
+}
+
 static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t length)
 {
 	struct hyquic_adapter *hyquic = quic_hyquic(sk);
@@ -1423,6 +1434,9 @@ static int quic_setsockopt(struct sock *sk, int level, int optname,
 		break;
 	case QUIC_SOCKOPT_CRYPTO_SECRET:
 		retval = quic_sock_set_crypto_secret(sk, kopt, optlen);
+		break;
+	case HYQUIC_SOCKOPT_OPTIONS:
+		retval = hyquic_sock_set_options(sk, kopt, optlen);
 		break;
 	case HYQUIC_SOCKOPT_TRANSPORT_PARAM:
 		retval = hyquic_sock_set_transport_param(sk, kopt, optlen);

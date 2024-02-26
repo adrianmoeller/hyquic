@@ -14,11 +14,12 @@ struct hyquic_transport_param {
 
 struct hyquic_adapter {
     bool enabled;
+    struct hyquic_options options;
 
     struct list_head transport_params_remote;
     struct list_head transport_params_local;
 
-    uint64_t next_usrquic_frame_seq_no;
+    uint64_t next_usrquic_frame_seqnum;
     struct sk_buff_head usrquic_frames_outqueue;
     struct quic_hash_table frame_details_table;
     struct sk_buff_head unkwn_frames_inqueue;

@@ -1,6 +1,10 @@
 #ifndef __uapi_hyquic_h__
 #define __uapi_hyquic_h__
 
+struct hyquic_options {
+	uint8_t loss_detection_frame_seqnum:1;
+};
+
 enum hyquic_data_type {
 	HYQUIC_DATA_NONE,
 	HYQUIC_DATA_RAW_FRAMES,
@@ -9,7 +13,7 @@ enum hyquic_data_type {
 };
 
 struct hyquic_data_raw_frames {
-	uint64_t seq_no_first_frame;
+	uint64_t seqnum_first_frame;
 };
 
 struct hyquic_data_info {
@@ -22,8 +26,9 @@ struct hyquic_data_info {
 };
 
 /* HyQUIC Socket Options API */
-#define HYQUIC_SOCKOPT_TRANSPORT_PARAM			15
-#define HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN		16
+#define HYQUIC_SOCKOPT_OPTIONS					15
+#define HYQUIC_SOCKOPT_TRANSPORT_PARAM			16
+#define HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN		17
 
 struct hyquic_frame_details {
 	uint64_t frame_type;

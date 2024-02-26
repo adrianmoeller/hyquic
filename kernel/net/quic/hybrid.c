@@ -37,11 +37,12 @@ static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details
 int hyquic_init(struct hyquic_adapter *hyquic)
 {
     hyquic->enabled = false;
+    hyquic->options = (struct hyquic_options) {};
 
     INIT_LIST_HEAD(&hyquic->transport_params_remote);
     INIT_LIST_HEAD(&hyquic->transport_params_local);
 
-    hyquic->next_usrquic_frame_seq_no = 0;
+    hyquic->next_usrquic_frame_seqnum = 0;
     skb_queue_head_init(&hyquic->usrquic_frames_outqueue);
     if (hyquic_frame_details_table_init(&hyquic->frame_details_table))
         return -ENOMEM;
