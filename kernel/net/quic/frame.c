@@ -1479,7 +1479,7 @@ int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_p
 			p += valuelen;
 			break;
 		default:
-			if (!quic_hyquic(sk)->enabled) {
+			if (quic_hyquic(sk)->enabled) {
 				uint32_t type_length = quic_var_len(type);
 				uint8_t *tp_start = p - type_length;
 				size_t tp_length;
