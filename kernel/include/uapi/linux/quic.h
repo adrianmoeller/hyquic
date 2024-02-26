@@ -58,26 +58,6 @@ struct quic_stream_info {
 	uint32_t stream_flag;
 };
 
-enum hyquic_data_type {
-	HYQUIC_DATA_NONE,
-	HYQUIC_DATA_RAW_FRAMES,
-	HYQUIC_DATA_RAW_FRAMES_FIX,
-	HYQUIC_DATA_RAW_FRAMES_VAR,
-};
-
-struct hyquic_data_raw_frames {
-	uint64_t seq_no_first_frame;
-};
-
-struct hyquic_data_info {
-	enum hyquic_data_type type;
-	uint32_t data_length;
-	union {
-		struct hyquic_data_raw_frames raw_frames;
-		uint8_t incompl;
-	};
-};
-
 enum quic_msg_flags {
 	MSG_NOTIFICATION	= 0x8000,
 	MSG_STREAM_UNI		= 0x800,
@@ -100,10 +80,6 @@ enum quic_msg_flags {
 #define QUIC_SOCKOPT_TRANSPORT_PARAM_EXT		12
 #define QUIC_SOCKOPT_RETIRE_CONNECTION_ID		13
 #define QUIC_SOCKOPT_ACTIVE_CONNECTION_ID		14
-
-/* HyQUIC Socket Options API */
-#define HYQUIC_SOCKOPT_TRANSPORT_PARAM			15
-#define HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN		16
 
 #define QUIC_VERSION_V1			0x1
 #define QUIC_VERSION_V2			0x6b3343cf
@@ -133,14 +109,6 @@ struct quic_transport_param {
 	uint8_t		congestion_control_alg;
 	uint32_t	payload_cipher_type;
 	uint32_t	version;
-};
-
-struct hyquic_frame_details {
-	uint64_t frame_type;
-	size_t fixed_length;
-	uint8_t ack_eliciting:1;
-	uint8_t ack_immidiate:1;
-	uint8_t non_probing:1;
 };
 
 struct quic_crypto_secret {

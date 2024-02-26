@@ -1,7 +1,7 @@
 #ifndef __QUIC_HYBRID_H__
 #define __QUIC_HYBRID_H__
 
-#include <uapi/linux/quic.h>
+#include <uapi/linux/hyquic.h>
 #include <linux/list.h>
 #include <linux/skbuff.h>
 #include "hashtable.h"

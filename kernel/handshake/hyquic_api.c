@@ -1,9 +1,8 @@
-#include <sys/socket.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "netinet/quic.h"
+#include "netinet/hyquic.h"
+#include <linux/quic.h>
 
 int hyquic_set_transport_parameter(int sockfd, const void *param, size_t param_length, struct hyquic_frame_details *frame_details, size_t num_frame_details)
 {
