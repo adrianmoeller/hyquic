@@ -648,6 +648,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 	int err, copy, copied = 0, freed = 0;
 	struct quic_stream_info sinfo = {};
 	int fin, off, event, dgram, level;
+	struct hyquic_info hyquic_data_info = {};
 	struct hyquic_rcv_cb *hyquic_rcv_cb;
 	struct quic_rcv_cb *rcv_cb;
 	struct quic_stream *stream;
@@ -663,6 +664,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 
 	skb = skb_peek(&sk->sk_receive_queue);
 	rcv_cb = QUIC_RCV_CB(skb);
+	hyquic_rcv_cb = HYQUIC_RCV_CB(skb);
 	stream = rcv_cb->stream;
 	do {
 		off = rcv_cb->read_offset;
@@ -685,15 +687,19 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 			msg->msg_flags |= MSG_DATAGRAM;
 			sinfo.stream_flag |= QUIC_STREAM_FLAG_DATAGRAM;
 		} else if (!stream) {
-			hyquic_rcv_cb = HYQUIC_RCV_CB(skb);
-			pr_info("<<HYQUIC>> cb: %u\n", hyquic_rcv_cb->hyquic_data);
-			hinfo.crypto_level = level;
-			put_cmsg(msg, IPPROTO_QUIC, QUIC_HANDSHAKE_INFO, sizeof(hinfo), &hinfo);
+			if (hyquic_rcv_cb->hyquic_data) {
+				hyquic_data_info.type = hyquic_rcv_cb->hyquic_data;
+			} else {
+				hinfo.crypto_level = level;
+				put_cmsg(msg, IPPROTO_QUIC, QUIC_HANDSHAKE_INFO, sizeof(hinfo), &hinfo);
+			}
 		}
 		if (flags & MSG_PEEK)
 			break;
 		if (copy != skb->len - off) {
 			rcv_cb->read_offset += copy;
+			if (hyquic_data_info.type)
+				hyquic_data_info.incompl = true;
 			break;
 		}
 		if (event) {
@@ -739,6 +745,8 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 	}
 	if (event || stream)
 		put_cmsg(msg, IPPROTO_QUIC, QUIC_STREAM_INFO, sizeof(sinfo), &sinfo);
+	if (hyquic_data_info.type)
+		put_cmsg(msg, IPPROTO_QUIC, HYQUIC_INFO, sizeof(hyquic_data_info), &hyquic_data_info);
 	err = copied;
 out:
 	release_sock(sk);

@@ -33,7 +33,7 @@ struct hyquic_rcv_cb {
 
 #define HYQUIC_RCV_CB(__skb) ((struct hyquic_rcv_cb *)&((__skb)->cb[0]))
 
-void hyquic_enable(struct sock *sk);
+inline void hyquic_enable(struct sock *sk);
 int hyquic_init(struct hyquic_adapter *hyquic);
 void hyquic_free(struct hyquic_adapter *hyquic);
 inline void hyquic_transport_params_add(struct hyquic_transport_param *param, struct list_head *param_list);

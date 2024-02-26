@@ -74,6 +74,7 @@ struct hyquic_info {
 	uint32_t data_length;
 	union {
 		struct hyquic_info_raw_frames raw_frames;
+		uint8_t incompl;
 	};
 };
 
@@ -178,7 +179,6 @@ enum quic_event_type {
 	QUIC_EVENT_CONNECTION_MIGRATION,
 	QUIC_EVENT_KEY_UPDATE,
 	QUIC_EVENT_NEW_TOKEN,
-	QUIC_EVENT_HYQUIC_DATA,
 	QUIC_EVENT_END,
 	QUIC_EVENT_MAX = QUIC_EVENT_END - 1,
 };

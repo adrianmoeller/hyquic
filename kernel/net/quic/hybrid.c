@@ -8,14 +8,13 @@ struct hyquic_frame_details_entry {
     struct hyquic_frame_details details;
 };
 
-void hyquic_enable(struct sock *sk)
+inline void hyquic_enable(struct sock *sk)
 {
     struct hyquic_adapter *hyquic = quic_hyquic(sk);
 
     if (hyquic->enabled)
         return;
     hyquic->enabled = true;
-    quic_inq(sk)->events |=  (1 << QUIC_EVENT_HYQUIC_DATA);
 }
 
 static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details_table)
