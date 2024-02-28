@@ -8,12 +8,6 @@ struct hyquic_frame_details_entry {
     struct hyquic_frame_details details;
 };
 
-struct hyquic_sent_usrquic_frame_entry {
-    struct hlist_node node;
-    int64_t packet_num;
-    uint64_t frame_seqnum;
-};
-
 inline void hyquic_enable(struct sock *sk)
 {
     struct hyquic_adapter *hyquic = quic_hyquic(sk);
@@ -40,23 +34,6 @@ static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details
 	return 0;
 }
 
-static int hyquic_sent_usrquic_frame_table_init(struct quic_hash_table *sent_usrquic_frame_table)
-{
-    struct quic_hash_head *head;
-    int i, size = 32;
-
-    head = kmalloc_array(size, sizeof(*head), GFP_KERNEL);
-    if (!head)
-        return -ENOMEM;
-    for (i = 0; i < size; i++) {
-		spin_lock_init(&head[i].lock);
-		INIT_HLIST_HEAD(&head[i].head);
-	}
-    sent_usrquic_frame_table->size = size;
-    sent_usrquic_frame_table->hash = head;
-    return 0;
-}
-
 int hyquic_init(struct hyquic_adapter *hyquic, struct sock *sk)
 {
     hyquic->enabled = false;
@@ -70,8 +47,6 @@ int hyquic_init(struct hyquic_adapter *hyquic, struct sock *sk)
     skb_queue_head_init(&hyquic->usrquic_frames_outqueue);
     skb_queue_head_init(&hyquic->unkwn_frames_inqueue);
     if (hyquic_frame_details_table_init(&hyquic->frame_details_table))
-        return -ENOMEM;
-    if (hyquic_sent_usrquic_frame_table_init(&hyquic->sent_usrquic_frame_table))
         return -ENOMEM;
 
     return 0;
@@ -94,23 +69,6 @@ static void hyquic_frame_details_table_free(struct quic_hash_table *frame_detail
     kfree(frame_details_table->hash);
 }
 
-static void hyquic_sent_usrquic_frame_table_free(struct quic_hash_table *sent_usrquic_frame_table)
-{
-    struct quic_hash_head *head;
-    struct hyquic_sent_usrquic_frame_entry *entry;
-    struct hlist_node *tmp;
-    int i;
-
-    for (i = 0; i < sent_usrquic_frame_table->size; i++) {
-        head = &sent_usrquic_frame_table->hash[i];
-        hlist_for_each_entry_safe(entry, tmp, &head->head, node) {
-            hlist_del_init(&entry->node);
-            kfree(entry);
-        }
-    }
-    kfree(sent_usrquic_frame_table->hash);
-}
-
 static void hyquic_transport_params_free(struct list_head *param_list)
 {
     struct hyquic_transport_param *cursor, *tmp;
@@ -130,7 +88,6 @@ void hyquic_free(struct hyquic_adapter *hyquic)
     __skb_queue_purge(&hyquic->usrquic_frames_outqueue);
     __skb_queue_purge(&hyquic->unkwn_frames_inqueue);
     hyquic_frame_details_table_free(&hyquic->frame_details_table);
-    hyquic_sent_usrquic_frame_table_free(&hyquic->sent_usrquic_frame_table);
 }
 
 inline void hyquic_transport_params_add(struct hyquic_transport_param *param, struct list_head *param_list)
@@ -333,7 +290,7 @@ int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
 
     rcv_cb = HYQUIC_RCV_CB(skb);
     rcv_cb->hyquic_data = HYQUIC_DATA_LOST_FRAMES;
-    
+
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);
     return 0;
