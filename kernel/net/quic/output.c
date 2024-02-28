@@ -387,6 +387,7 @@ unlink:
 
 void quic_outq_retransmit(struct sock *sk)
 {
+	struct hyquic_adapter *hyquic = quic_hyquic(sk);
 	struct quic_outqueue *outq = quic_outq(sk);
 	struct quic_snd_cb *snd_cb;
 	struct sk_buff_head *head;
@@ -412,6 +413,13 @@ next:
 	transmit_ts = snd_cb->transmit_ts;
 	packet_number = snd_cb->packet_number;
 	if (quic_frame_is_dgram(snd_cb->frame_type)) { /* no need to retransmit dgram frame */
+		outq->inflight -= snd_cb->data_bytes;
+		kfree_skb(skb);
+		quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);
+		goto next;
+	}
+	if (hyquic->enabled && hyquic->options.usrquic_retransmit && hyquic_is_usrquic_frame(hyquic, snd_cb->frame_type)) {
+		hyquic_process_lost_frame(sk, skb);
 		outq->inflight -= snd_cb->data_bytes;
 		kfree_skb(skb);
 		quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);

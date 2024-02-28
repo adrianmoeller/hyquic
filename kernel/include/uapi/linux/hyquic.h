@@ -2,7 +2,7 @@
 #define __uapi_hyquic_h__
 
 struct hyquic_options {
-	uint8_t loss_detection_frame_seqnum:1;
+	uint8_t usrquic_retransmit:1;
 };
 
 enum hyquic_data_type {
@@ -10,10 +10,11 @@ enum hyquic_data_type {
 	HYQUIC_DATA_RAW_FRAMES,
 	HYQUIC_DATA_RAW_FRAMES_FIX,
 	HYQUIC_DATA_RAW_FRAMES_VAR,
+	HYQUIC_DATA_LOST_FRAMES,
 };
 
 struct hyquic_data_raw_frames {
-	uint64_t seqnum_first_frame;
+	uint64_t first_frame_seqnum;
 };
 
 struct hyquic_data_info {

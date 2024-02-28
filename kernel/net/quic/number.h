@@ -176,4 +176,36 @@ static inline s64 quic_get_num(s64 max_pkt_num, s64 pkt_num, u32 n)
 	return cand;
 }
 
+static inline u8 quic_peek_var(u8 *p, u64 *val)
+{
+	union quic_num n;
+	u8 len;
+	u64 v = 0;
+
+	len = (u8)(1u << (*p >> 6));
+	switch (len) {
+	case 1:
+		v = *p;
+		break;
+	case 2:
+		memcpy(&n.be16, p, 2);
+		n.n[0] &= 0x3f;
+		v = ntohs(n.be16);
+		break;
+	case 4:
+		memcpy(&n.be32, p, 4);
+		n.n[0] &= 0x3f;
+		v = ntohl(n.be32);
+		break;
+	case 8:
+		memcpy(&n.be64, p, 8);
+		n.n[0] &= 0x3f;
+		v = be64_to_cpu(n.be64);
+		break;
+	}
+
+	*val = v;
+	return len;
+}
+
 #endif /* __QUIC_NUMBER_H__ */

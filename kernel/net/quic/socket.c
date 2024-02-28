@@ -182,7 +182,7 @@ static int quic_init_sock(struct sock *sk)
 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 	local_bh_enable();
 
-	if (hyquic_init(quic_hyquic(sk)))
+	if (hyquic_init(quic_hyquic(sk), sk))
 		return -ENOMEM;
 
 	return 0;
