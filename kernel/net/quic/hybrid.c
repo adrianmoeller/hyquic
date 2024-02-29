@@ -1,6 +1,7 @@
 #include <linux/slab.h>
 #include "number.h"
 #include "socket.h"
+#include "intercom.h"
 #include "hybrid.h"
 
 struct hyquic_frame_details_entry {
@@ -116,14 +117,15 @@ struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t 
     return param;
 }
 
-struct sk_buff* hyquic_frame_create_raw(uint8_t **pdata, uint32_t *pdata_length, uint64_t *pframe_seqnum)
+static struct sk_buff* hyquic_frame_create_raw(uint8_t **pdata, uint32_t *pdata_length, uint64_t *pframe_seqnum)
 {
-    uint64_t frame_length, frame_type;
+    uint32_t frame_length;
+    uint64_t frame_type;
     struct sk_buff *skb;
     struct hyquic_snd_cb *snd_cb;
 
-    if (!quic_get_var(pdata, pdata_length, &frame_length))
-        return NULL;
+    frame_length = hyquic_ic_get_int(pdata, 4);
+    *pdata_length -= 4;
     if (!frame_length || frame_length > *pdata_length)
         return NULL;
     quic_peek_var(*pdata, &frame_type);

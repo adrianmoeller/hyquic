@@ -176,7 +176,7 @@ static inline s64 quic_get_num(s64 max_pkt_num, s64 pkt_num, u32 n)
 	return cand;
 }
 
-static inline u8 quic_peek_var(u8 *p, u64 *val)
+static inline u8 quic_peek_var(const u8 *p, u64 *val)
 {
 	union quic_num n;
 	u8 len;
