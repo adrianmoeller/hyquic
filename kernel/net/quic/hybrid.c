@@ -161,7 +161,7 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
     return 0;
 }
 
-int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_data_info *info)
+int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_data_sendinfo *info)
 {
     int err = 0;
     uint8_t *data = (uint8_t*) kmalloc_array(info->data_length, sizeof(uint8_t), GFP_KERNEL);

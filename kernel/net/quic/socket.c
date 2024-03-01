@@ -381,7 +381,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 		case HYQUIC_INFO:
 			if (!quic_hyquic(sk)->enabled)
 				return -EINVAL;
-			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_data_info)))
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_data_sendinfo)))
 				return -EINVAL;
 			err = hyquic_process_usrquic_data(sk, &msg->msg_iter, CMSG_DATA(cmsg));
 			if (err)
@@ -648,7 +648,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 	int err, copy, copied = 0, freed = 0;
 	struct quic_stream_info sinfo = {};
 	int fin, off, event, dgram, level;
-	struct hyquic_data_info hyquic_data_info = {};
+	struct hyquic_data_recvinfo hyquic_data_info = {};
 	struct hyquic_rcv_cb *hyquic_rcv_cb;
 	struct quic_rcv_cb *rcv_cb;
 	struct quic_stream *stream;
@@ -689,6 +689,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 		} else if (!stream) {
 			if (hyquic_rcv_cb->hyquic_data) {
 				hyquic_data_info.type = hyquic_rcv_cb->hyquic_data;
+				hyquic_data_info.data_length = skb->len;
 			} else {
 				hinfo.crypto_level = level;
 				put_cmsg(msg, IPPROTO_QUIC, QUIC_HANDSHAKE_INFO, sizeof(hinfo), &hinfo);

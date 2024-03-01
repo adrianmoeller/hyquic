@@ -17,13 +17,18 @@ struct hyquic_data_raw_frames {
 	uint64_t first_frame_seqnum;
 };
 
-struct hyquic_data_info {
+struct hyquic_data_sendinfo {
 	enum hyquic_data_type type;
 	uint32_t data_length;
 	union {
 		struct hyquic_data_raw_frames raw_frames;
-		uint8_t incompl;
 	};
+};
+
+struct hyquic_data_recvinfo {
+	enum hyquic_data_type type;
+	uint32_t data_length;
+	uint8_t incompl;
 };
 
 /* HyQUIC Socket Options API */
