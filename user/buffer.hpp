@@ -20,7 +20,7 @@ namespace hyquic
         }
 
         buffer(uint32_t len)
-            : data((uint8_t*) malloc(len)), len(len)
+            : data((uint8_t*) calloc(len, sizeof(uint8_t))), len(len)
         {
         }
 
@@ -185,12 +185,14 @@ namespace hyquic
                 break;
             case 3:
                 memcpy(((uint8_t*) &val) + 1, data, 3);
-                boost::endian::conditional_reverse_inplace<Order, endian_order::big, uint32_t>(val);
+                boost::endian::conditional_reverse_inplace<Order, endian_order::native, uint32_t>(val);
                 break;
             case 4:
                 val = boost::endian::endian_load<uint32_t, 4, Order>(data);
                 break;
             }
+            data += len;
+            len -= len;
             return val;
         }
 
@@ -231,12 +233,12 @@ namespace hyquic
                 *data = (uint8_t) val;
                 break;
             case 2: {
-                uint16_t num = boost::endian::conditional_reverse<Order, endian_order::big, uint16_t>((uint16_t) val);
+                uint16_t num = boost::endian::conditional_reverse<Order, endian_order::native, uint16_t>((uint16_t) val);
                 memcpy(data, &num, 2);
                 break;
             }
             case 4: {
-                uint32_t num = boost::endian::conditional_reverse<Order, endian_order::big, uint32_t>((uint32_t) val);
+                uint32_t num = boost::endian::conditional_reverse<Order, endian_order::native, uint32_t>((uint32_t) val);
                 memcpy(data, &num, 4);
                 break;
             }

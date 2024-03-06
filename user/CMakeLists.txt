@@ -9,14 +9,23 @@ find_package(Boost 1.84.0 REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 include_directories(./include/asio-1.28.0/include)
 
-include(CTest)
-enable_testing()
-
 add_library(hyquic INTERFACE)
 target_include_directories(hyquic INTERFACE .)
 
 add_executable(tmp tmp.cpp)
 target_link_libraries(tmp PUBLIC hyquic)
+
+# TESTING
+
+include(CTest)
+enable_testing()
+
+add_executable(buffer_test tests/buffer_test.cpp)
+target_link_libraries(buffer_test PUBLIC hyquic)
+
+add_test(buffer_test buffer_test)
+
+# PACKAGING
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
