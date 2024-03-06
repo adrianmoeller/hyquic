@@ -7,12 +7,14 @@
 #include <boost/asio.hpp>
 #include <memory>
 #include <cstdint>
+#include <cassert>
 #include <vector>
 #include <list>
 #include <functional>
 #include <unordered_map>
 #include "buffer.hpp"
 #include "sock_interface.hpp"
+#include "errors.hpp"
 
 namespace hyquic
 {
@@ -20,8 +22,8 @@ namespace hyquic
     {
     public:
         virtual std::vector<uint64_t>& frame_types() = 0;
-        virtual uint32_t handle_frame(uint64_t type, buffer_view buff) = 0;
-        virtual void handle_lost_frame(uint64_t type, buffer_view buff) = 0;
+        virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
+        virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
     };
 
 #define RECV_STREAM_BUFF_INIT_SIZE  2048
@@ -31,7 +33,7 @@ namespace hyquic
     {
     public:
         hyquic(int sockfd)
-            : sockfd(sockfd), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1)
+            : running(false), sockfd(sockfd), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
         {
             // TODO
         }
@@ -49,26 +51,31 @@ namespace hyquic
 
         void register_extension(extension &ext)
         {
+            if (running)
+                throw extension_config_error("Extensions must be registered before running HyQUIC.");
+
             for (auto const &frame_type : ext.frame_types()) {
-                if (!extension_reg.contains(frame_type))
-                    extension_reg[frame_type] = std::vector<std::reference_wrapper<extension>>();
-                extension_reg.at(frame_type).push_back(std::ref(ext));
+                if (extension_reg.contains(frame_type))
+                    throw extension_config_error("A frame type can only be managed by one extension at a time.");
+                extension_reg.insert({frame_type, std::ref(ext)});
             }
         }
 
         void run()
         {
+            running = true;
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
             });
         }
 
     private:
+        bool running;
         const int sockfd;
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
         stream_data_buff recv_buff;
-        std::unordered_map<uint64_t, std::vector<std::reference_wrapper<extension>>> extension_reg;
+        std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
 
         struct {
             hyquic_data_type type;
@@ -162,27 +169,49 @@ namespace hyquic
             {
             case HYQUIC_DATA_RAW_FRAMES_FIX: {
                 buffer_view buff_view(buff);
+                uint64_t frame_type;
+
                 while(!buff_view.end()) {
-                    auto [frame_type, frame_type_len] = buff_view.pull_var();
-                    if (!frame_type_len)
-                        return;
-                    if (extension_reg.contains(frame_type)) {
-                        uint32_t frame_content_len;
-                        for (extension &ext : extension_reg.at(frame_type))
-                            frame_content_len = ext.handle_frame(frame_type, buff_view);
-                        buff_view.prune(frame_content_len);
-                    } else {
-                        // TODO skip
-                    }
+                    assert(buff_view.pull_var(frame_type));
+                    assert(extension_reg.contains(frame_type));
+                    extension &ext = extension_reg.at(frame_type);
+                    uint32_t frame_content_len = ext.handle_frame(frame_type, buff_view);
+                    buff_view.prune(frame_content_len);
                 }
+                break;
             }
+            case HYQUIC_DATA_RAW_FRAMES_VAR: {
+                buffer_view buff_view(buff);
+                uint64_t frame_type;
+                uint8_t frame_type_len;
+                uint32_t bytes_parsed = 0;
+
+                frame_type_len = buff_view.pull_var(frame_type);
+                assert(frame_type_len);
+                while (extension_reg.contains(frame_type)) {
+                    extension &ext = extension_reg.at(frame_type);
+                    uint32_t frame_content_len = ext.handle_frame(frame_type, buff_view);
+                    buff_view.prune(frame_content_len);
+                    bytes_parsed += frame_type_len + frame_content_len;
+                    if (buff_view.end())
+                        break;
+                    frame_type_len = buff_view.pull_var(frame_type);
+                    assert(frame_type_len);
+                }
+                // TODO notify kernquic of bytes_parsed
                 break;
-            case HYQUIC_DATA_RAW_FRAMES_VAR:
-                // TODO
+            }
+            case HYQUIC_DATA_LOST_FRAMES: {
+                const buffer_view buff_view(buff);
+                buffer_view buff_view_content(buff);
+                uint64_t frame_type;
+
+                assert(buff_view_content.pull_var(frame_type));
+                assert(extension_reg.contains(frame_type));
+                extension &ext = extension_reg.at(frame_type);
+                ext.handle_lost_frame(frame_type, buff_view_content, buff_view);
                 break;
-            case HYQUIC_DATA_LOST_FRAMES:
-                // TODO
-                break;
+            }
             default:
                 break;
             }

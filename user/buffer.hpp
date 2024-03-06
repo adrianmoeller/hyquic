@@ -58,7 +58,6 @@ namespace hyquic
         }
     };
 
-    typedef std::tuple<uint64_t, uint8_t> var_int;
     typedef boost::endian::order endian_order;
     const endian_order NATIVE = endian_order::native;
     const endian_order NETWORK = endian_order::big;
@@ -122,7 +121,7 @@ namespace hyquic
             return true;
         }
 
-        inline buffer copy(uint32_t len)
+        inline buffer copy(uint32_t len) const
         {
             if (len > this->len)
                 return buffer();
@@ -131,22 +130,21 @@ namespace hyquic
             return copied;
         }
 
-        inline bool end()
+        inline bool end() const
         {
             return !len;
         }
 
-        inline var_int pull_var()
+        inline uint8_t pull_var(uint64_t &val)
         {
             if (end())
-                return {0, 0};
+                return 0;
 
             uint8_t val_len = (uint8_t) (1u << (*data >> 6));
             if (len < val_len)
-                return {0, 0};
+                return 0;
             
             dyn_num num;
-            uint64_t val;
             switch (val_len)
             {
             case 1:
@@ -170,7 +168,7 @@ namespace hyquic
             }
             data += val_len;
             len -= val_len;
-            return {val, val_len};
+            return val_len;
         }
 
         template<endian_order Order>
@@ -235,13 +233,13 @@ namespace hyquic
             case 2: {
                 uint16_t num = boost::endian::conditional_reverse<Order, endian_order::big, uint16_t>((uint16_t) val);
                 memcpy(data, &num, 2);
-            }
                 break;
+            }
             case 4: {
                 uint32_t num = boost::endian::conditional_reverse<Order, endian_order::big, uint32_t>((uint32_t) val);
                 memcpy(data, &num, 4);
-            }
                 break;
+            }
             }
             data += len;
             this->len -= len;
