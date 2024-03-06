@@ -12,8 +12,6 @@
 
 namespace hyquic
 {
-    using namespace std;
-
     int set_transport_parameter(int sockfd, const buffer &param, const hyquic_frame_details *frame_details, size_t num_frame_details)
     {
         size_t frame_details_length = num_frame_details * sizeof(hyquic_frame_details);
@@ -87,8 +85,8 @@ namespace hyquic
     }
 
     struct receive_ops {
-        function<int(buffer&&, const quic_stream_info&)> recv_stream_data;
-        function<int(buffer&&, const hyquic_data_recvinfo&)> recv_hyquic_data;
+        std::function<int(buffer&&, const quic_stream_info&)> recv_stream_data;
+        std::function<int(buffer&&, const hyquic_data_recvinfo&)> recv_hyquic_data;
     };
 
     union hyquic_cmsg_content {
@@ -129,12 +127,12 @@ namespace hyquic
                 continue;
             if (cursor->cmsg_type == QUIC_STREAM_INFO) {
                 memcpy(&info.stream, CMSG_DATA(cursor), sizeof(quic_stream_info));
-                err = recv_ops.recv_stream_data(move(buff), info.stream);
+                err = recv_ops.recv_stream_data(std::move(buff), info.stream);
                 break;
             }
             if (cursor->cmsg_type == HYQUIC_INFO) {
                 memcpy(&info.hyquic, CMSG_DATA(cursor), sizeof(hyquic_data_recvinfo));
-                err = recv_ops.recv_hyquic_data(move(buff), info.hyquic);
+                err = recv_ops.recv_hyquic_data(std::move(buff), info.hyquic);
                 break;
             }
         }
