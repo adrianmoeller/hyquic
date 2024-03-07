@@ -687,8 +687,9 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 			msg->msg_flags |= MSG_DATAGRAM;
 			sinfo.stream_flag |= QUIC_STREAM_FLAG_DATAGRAM;
 		} else if (!stream) {
-			if (hyquic_rcv_cb->hyquic_data) {
-				hyquic_data_info.type = hyquic_rcv_cb->hyquic_data;
+			if (hyquic_rcv_cb->hyquic_data_type) {
+				hyquic_data_info.type = hyquic_rcv_cb->hyquic_data_type;
+				hyquic_data_info.details = hyquic_rcv_cb->hyquic_data_details;
 				hyquic_data_info.data_length = skb->len;
 			} else {
 				hinfo.crypto_level = level;
@@ -719,7 +720,12 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 			kfree_skb(__skb_dequeue(&sk->sk_receive_queue));
 			break;
 		} else if (!stream) {
-			kfree_skb(__skb_dequeue(&sk->sk_receive_queue));
+			skb = __skb_dequeue(&sk->sk_receive_queue);
+			if (hyquic_rcv_cb->hyquic_data_type == HYQUIC_DATA_RAW_FRAMES_VAR) {
+				__skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred, skb);
+				break;
+			}
+			kfree_skb(skb);
 			break;
 		}
 		freed += skb->len;

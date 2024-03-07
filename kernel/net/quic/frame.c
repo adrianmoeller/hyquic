@@ -1289,9 +1289,10 @@ static struct quic_frame_ops quic_frame_ops[QUIC_FRAME_MAX + 1] = {
 	quic_frame_create_and_process(datagram),
 };
 
-int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki)
+int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, bool *var_frame_encountered)
 {
-	int ret, len = pki->length;
+	int ret;
+	int64_t len = pki->length;
 	u8 type;
 	struct hyquic_frame_details *frame_details;
 
@@ -1300,18 +1301,21 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 
 	while (len > 0) {
 		type = *(u8 *)(skb->data);
-		skb_pull(skb, 1);
-		len--;
 
 		if (quic_hyquic(sk)->enabled) {
 			frame_details = hyquic_frame_details_get(quic_hyquic(sk), type);
 			if (frame_details) {
-				ret = hyquic_process_unkwn_frame(sk, skb, pki, frame_details);
-				if (ret)
+				ret = hyquic_process_unkwn_frame(sk, skb, pki, len, frame_details, var_frame_encountered);
+				if (ret < 0)
 					return ret;
-				goto end;
+				if (var_frame_encountered)
+					break;
+				goto end_while;
 			}
 		}
+
+		skb_pull(skb, 1);
+		len--;
 
 		if (type > QUIC_FRAME_MAX) {
 			pr_err_once("[QUIC] %s unsupported frame %x\n", __func__, type);
@@ -1335,7 +1339,7 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 		if (quic_frame_non_probing(type))
 			pki->non_probing = 1;
 
-	end:
+	end_while:
 		skb_pull(skb, ret);
 		len -= ret;
 	}
@@ -1343,6 +1347,11 @@ int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_
 	hyquic_flush_unkwn_frames_inqueue(sk);
 
 	return 0;
+}
+
+inline int __quic_internal_process_frame(struct sock *sk, struct sk_buff *skb, uint64_t type)
+{
+	return quic_frame_ops[type].frame_process(sk, skb, type);
 }
 
 struct sk_buff *quic_frame_create(struct sock *sk, u8 type, void *data)

@@ -85,7 +85,13 @@ static inline bool quic_frame_is_dgram(u8 type)
 }
 
 struct sk_buff *quic_frame_create(struct sock *sk, u8 type, void *data);
-int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki);
+int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, bool *var_frame_encountered);
+static inline int quic_frame_process(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki)
+{
+	bool tmp;
+	return quic_frame_process_hybrid(sk, skb, pki, &tmp);
+}
+inline int __quic_internal_process_frame(struct sock *sk, struct sk_buff *skb, uint64_t type);
 int quic_frame_new_connection_id_ack(struct sock *sk, struct sk_buff *skb);
 int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_param *params,
 					u8 *data, u32 len);

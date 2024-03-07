@@ -321,6 +321,7 @@ int quic_packet_process(struct sock *sk, struct sk_buff *skb, u8 resume)
 	union quic_addr addr;
 	struct sk_buff *fskb;
 	int err = -EINVAL;
+	bool var_frame_encountered = false;
 
 	WARN_ON(!skb_set_owner_sk_safe(skb, sk));
 
@@ -376,7 +377,7 @@ int quic_packet_process(struct sock *sk, struct sk_buff *skb, u8 resume)
 	pki.length -= pki.number_len;
 	pki.length -= QUIC_TAG_LEN;
 	rcv_cb->level = 0;
-	err = quic_frame_process(sk, skb, &pki);
+	err = quic_frame_process_hybrid(sk, skb, &pki, &var_frame_encountered);
 	if (err)
 		goto err;
 	err = quic_pnmap_mark(pnmap, pki.number);
@@ -404,6 +405,8 @@ int quic_packet_process(struct sock *sk, struct sk_buff *skb, u8 resume)
 
 	if (!pki.ack_immediate && !quic_pnmap_has_gap(pnmap)) {
 		quic_timer_start(sk, QUIC_TIMER_ACK);
+		if (var_frame_encountered)
+			hyquic_frame_var_notify_ack_timer_started(sk);
 		goto out;
 	}
 	fskb = quic_frame_create(sk, QUIC_FRAME_ACK, &level);
@@ -412,6 +415,8 @@ int quic_packet_process(struct sock *sk, struct sk_buff *skb, u8 resume)
 		quic_outq_ctrl_tail(sk, fskb, true);
 		quic_timer_stop(sk, QUIC_TIMER_ACK);
 	}
+	if (var_frame_encountered)
+		hyquic_frame_var_notify_ack_sent(sk);
 
 out:
 	consume_skb(skb);
