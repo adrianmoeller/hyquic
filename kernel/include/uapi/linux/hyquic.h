@@ -41,6 +41,7 @@ struct hyquic_data_raw_frames_var_recv {
 	uint8_t ack_sent:1;
 	uint8_t ack_timer_started:1;
 	uint8_t non_probing:1;
+	uint8_t path_alt:1;
 };
 
 union hyquic_data_recvinfo_details {

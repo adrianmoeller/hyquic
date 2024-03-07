@@ -278,7 +278,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
             fskb = quic_frame_create(sk, QUIC_FRAME_ACK, &level);
             if (!fskb)
                 return -ENOMEM;
-            QUIC_SND_CB(fskb)->path_alt = rcv_cb->path_alt;
+            QUIC_SND_CB(fskb)->path_alt = details->path_alt;
             quic_outq_ctrl_tail(sk, fskb, true);
             quic_timer_stop(sk, QUIC_TIMER_ACK);
             details->ack_sent = true;
@@ -375,6 +375,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         details->ack_sent = false;
         details->ack_timer_started = false;
         details->non_probing = pki->non_probing;
+        details->path_alt = QUIC_RCV_CB(skb)->path_alt;
 
         __skb_queue_tail(&sk->sk_receive_queue, fskb);
         sk->sk_data_ready(sk);
