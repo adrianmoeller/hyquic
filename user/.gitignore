@@ -32,3 +32,5 @@
 *.app
 
 /build/
+/tests/keys/*.pem
+/tests/keys/server.ext
