@@ -1,6 +1,9 @@
 #ifndef __HYQUIC_HPP__
 #define __HYQUIC_HPP__
 
+extern "C" {
+#include <netinet/quic.h>
+}
 #include <iostream>
 #include <linux/quic.h>
 #include <linux/hyquic.h>
@@ -8,6 +11,7 @@
 #include <memory>
 #include <cstdint>
 #include <cassert>
+#include <cerrno>
 #include <vector>
 #include <list>
 #include <functional>
@@ -21,7 +25,8 @@ namespace hyquic
     class extension
     {
     public:
-        virtual std::vector<uint64_t>& frame_types() = 0;
+        virtual buffer transport_parameter() = 0;
+        virtual std::vector<hyquic_frame_details>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
     };
@@ -32,10 +37,9 @@ namespace hyquic
     class hyquic
     {
     public:
-        hyquic(int sockfd)
-            : running(false), sockfd(sockfd), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
+        hyquic()
+            : running(false), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
         {
-            // TODO
         }
 
         ~hyquic()
@@ -54,11 +58,17 @@ namespace hyquic
             if (running)
                 throw extension_config_error("Extensions must be registered before running HyQUIC.");
 
-            for (auto const &frame_type : ext.frame_types()) {
-                if (extension_reg.contains(frame_type))
+            for (auto const &frame_details : ext.frame_details_list()) {
+                if (extension_reg.contains(frame_details.frame_type))
                     throw extension_config_error("A frame type can only be managed by one extension at a time.");
-                extension_reg.insert({frame_type, std::ref(ext)});
+                extension_reg.insert({frame_details.frame_type, std::ref(ext)});
             }
+
+            int err = set_transport_parameter(sockfd, ext.transport_parameter(), ext.frame_details_list());
+            if (err = -EINVAL)
+                throw invalid_data_error("Setting transport parameter got invalid data.");
+            else
+                throw network_error("Setting transport parameter failed.");
         }
 
         void run()
@@ -69,9 +79,11 @@ namespace hyquic
             });
         }
 
-    private:
+    protected:
         bool running;
-        const int sockfd;
+        int sockfd;
+
+    private:
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
         stream_data_buff recv_buff;
@@ -129,7 +141,7 @@ namespace hyquic
                     if (hyquic_data_frag.type != info.type)
                         return -EFAULT;
                 }
-                if (!hyquic_data_frag.buff_view.push(std::move(data)))
+                if (!hyquic_data_frag.buff_view.push_buff(std::move(data)))
                     return -EFAULT;
             } else {
                 if (hyquic_data_frag.buff.empty()) {
@@ -139,7 +151,7 @@ namespace hyquic
                 } else {
                     if (hyquic_data_frag.type != info.type)
                         return -EFAULT;
-                    if (!hyquic_data_frag.buff_view.push(std::move(data)))
+                    if (!hyquic_data_frag.buff_view.push_buff(std::move(data)))
                         return -EFAULT;
                     if (!hyquic_data_frag.buff_view.end())
                         return -EFAULT;

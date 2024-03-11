@@ -7,13 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Boost 1.84.0 REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
-include_directories(./include/asio-1.28.0/include)
 
 add_library(hyquic INTERFACE)
 target_include_directories(hyquic INTERFACE .)
-
-add_executable(tmp tmp.cpp)
-target_link_libraries(tmp PUBLIC hyquic)
+target_link_libraries(hyquic INTERFACE quic)
 
 # TESTING
 

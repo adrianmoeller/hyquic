@@ -3,23 +3,41 @@
 
 #include <sys/socket.h>
 #include <iostream>
-#include <hyquic.hpp>
+#include <hyquic_client.hpp>
+#include <hyquic_server.hpp>
 
 using namespace hyquic;
 
 #define BCE(L,R) BOOST_CHECK_EQUAL(L,R)
-#define BA(expr) BOOST_ASSERT(!(expr))
+#define BAZ(expr) BOOST_ASSERT(!(expr))
 
 void test_client(int argc, char *argv[])
 {
+    BOOST_ASSERT(argc >= 3);
+
+    hyquic_client client(argv[2], atoi(argv[3]));
+
+    // TODO register extension
+
+    client.connect_to_server();
+
     // TODO
-    BA(0);
+    BAZ(0);
 }
 
 void test_server(int argc, char *argv[])
 {
+    BOOST_ASSERT(argc >= 5);
+
+    hyquic_server server(argv[2], atoi(argv[3]));
+    hyquic_server_connection connection = server.accept_connection();
+
+    // TODO register extension
+
+    connection.connect_to_client(argv[4], argv[5]);
+
     // TODO
-    BA(0);
+    BAZ(0);
 }
 
 BOOST_AUTO_TEST_CASE(buffer_init)

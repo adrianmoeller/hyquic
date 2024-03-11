@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/socket.h>
 #include "netinet/hyquic.h"
 #include "hyquic_intercom.h"
 #include <linux/quic.h>

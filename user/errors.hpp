@@ -31,6 +31,11 @@ namespace hyquic
     {
         using error::error;
     };
+
+    class network_error : public error
+    {
+        using error::error;
+    };
 } // namespace hyquic
 
 

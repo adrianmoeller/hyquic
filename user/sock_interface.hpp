@@ -4,6 +4,8 @@
 #include <iostream>
 #include <cstring>
 #include <functional>
+#include <vector>
+#include <queue>
 #include <linux/quic.h>
 #include <linux/hyquic.h>
 #include <sys/socket.h>
@@ -12,56 +14,52 @@
 
 namespace hyquic
 {
-    int set_transport_parameter(int sockfd, const buffer &param, const hyquic_frame_details *frame_details, size_t num_frame_details)
+    int set_transport_parameter(int sockfd, buffer &&param, const std::vector<hyquic_frame_details> &frame_details_list)
     {
+        size_t num_frame_details = frame_details_list.size();
         size_t frame_details_length = num_frame_details * sizeof(hyquic_frame_details);
-        size_t data_length = sizeof(size_t) + frame_details_length + param.len;
-        void *data = malloc(data_length);
-        uint8_t *p = (uint8_t*) data;
-        int err;
+        buffer buff(sizeof(size_t) + frame_details_length + param.len);
+        buffer_view cursor(buff);
 
-        memcpy(p, &num_frame_details, sizeof(size_t));
-        p += sizeof(size_t);
-        memcpy(p, frame_details, frame_details_length);
-        p += frame_details_length;
-        memcpy(p, param.data, param.len);
+        cursor.push(num_frame_details);
+        for (const hyquic_frame_details &frame_details : frame_details_list)
+            cursor.push(frame_details);
+        cursor.push_buff(std::move(param));
 
-        err = setsockopt(sockfd, SOL_QUIC, HYQUIC_SOCKOPT_TRANSPORT_PARAM, data, data_length);
-
-        free(data);
-        return err;
+        return setsockopt(sockfd, SOL_QUIC, HYQUIC_SOCKOPT_TRANSPORT_PARAM, buff.data, buff.len);
     }
 
-    static inline void assemble_frame_data(const buffer *frames, size_t num_frames, void *data)
+    static inline buffer assemble_frame_data(std::list<buffer> &frames)
     {
-        const buffer *frame_cursor = frames;
-        uint8_t *data_cursor = (uint8_t*) data;
-        int i;
+        size_t total_frame_data_length = 0;
+        for (const buffer &frame_buff : frames)
+            total_frame_data_length += frame_buff.len;
 
-        for (i = 0; i < num_frames; i++) {
-            data_cursor = ic::put_int(data_cursor, frame_cursor->len, 4);
-            data_cursor = ic::put_data(data_cursor, frame_cursor->data, frame_cursor->len);
-            frame_cursor += sizeof(*frame_cursor);
+        buffer buff(4 * frames.size() + total_frame_data_length);
+        buffer_view cursor(buff);
+
+        while (!frames.empty()) {
+            buffer frame_buff = std::move(frames.front());
+            frames.pop_front();
+            cursor.push_int<NATIVE>(frame_buff.len, 4);
+            cursor.push_buff(std::move(frame_buff));
         }
     }
 
-    int send_frames(int sockfd, const buffer *frames, size_t num_frames, size_t total_frame_data_length)
+    int send_frames(int sockfd, std::list<buffer> &frames)
     {
+        buffer buff = assemble_frame_data(frames);
         char outcmsg[CMSG_SPACE(sizeof(hyquic_data_sendinfo))];
-        size_t data_length = sizeof(frames->len) * num_frames + total_frame_data_length;
-        void *data = malloc(data_length);
         hyquic_data_sendinfo *info;
         msghdr msg;
         cmsghdr *cmsg;
         iovec iov;
 
-        assemble_frame_data(frames, num_frames, data);
-
         msg.msg_name = NULL;
         msg.msg_namelen = 0;
         msg.msg_iov = &iov;
-        iov.iov_base = data;
-        iov.iov_len = data_length;
+        iov.iov_base = buff.data;
+        iov.iov_len = buff.len;
         msg.msg_iovlen = 1;
 
         msg.msg_control = outcmsg;
@@ -76,7 +74,7 @@ namespace hyquic
         msg.msg_controllen = cmsg->cmsg_len;
         info = (hyquic_data_sendinfo*)CMSG_DATA(cmsg);
         info->type = HYQUIC_DATA_RAW_FRAMES;
-        info->data_length = data_length;
+        info->data_length = buff.len;
         info->raw_frames = (hyquic_data_raw_frames) {
             .first_frame_seqnum = 0 // TODO needed?
         };

@@ -10,8 +10,11 @@
  *    Xin Long <lucien.xin@gmail.com>
  */
 
+#ifndef __NETINET_QUIC_H__
+#define __NETINET_QUIC_H__
+
 #include <gnutls/abstract.h>
-#include <sys/socket.h>
+#include <stdint.h>
 #include <linux/quic.h>
 
 /* Socket option layer for QUIC */
@@ -46,3 +49,5 @@ int quic_server_handshake(int sockfd, char *pkey_file, char *cert_file);
 
 int quic_sendmsg(int sockfd, const void *msg, size_t len, uint64_t sid, uint32_t flag);
 int quic_recvmsg(int sockfd, void *msg, size_t len, uint64_t *sid, uint32_t *flag);
+
+#endif /* __NETINET_QUIC_H__ */

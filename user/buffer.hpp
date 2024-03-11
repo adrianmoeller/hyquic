@@ -111,16 +111,6 @@ namespace hyquic
             return true;
         }
 
-        inline bool push(buffer &&buff)
-        {
-            if (buff.len > len)
-                return false;
-            memcpy(data, buff.data, buff.len);
-            data += buff.len;
-            len -= buff.len;
-            return true;
-        }
-
         inline buffer copy(uint32_t len) const
         {
             if (len > this->len)
@@ -194,6 +184,27 @@ namespace hyquic
             data += len;
             len -= len;
             return val;
+        }
+
+        inline bool push(uint8_t *data, uint32_t len)
+        {
+            if (len > this->len)
+                return false;
+            memcpy(this->data, data, len);
+            this->data += len;
+            this->len -= len;
+            return true;
+        }
+
+        template<typename T>
+        inline bool push(const T &data)
+        {
+            return push((uint8_t*) &data, sizeof(T));
+        }
+
+        inline bool push_buff(buffer &&buff)
+        {
+            return push(buff.data, buff.len);
         }
 
         inline void push_var(uint64_t val)
