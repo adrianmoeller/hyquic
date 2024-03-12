@@ -27,8 +27,9 @@ shift $(($OPTIND - 1))
 APP_EXEC="./$@"
 
 rm -f test.tmp
-${APP_EXEC} -- server ${SERVER_ARGS} &> test.tmp &
+timeout -k 20s 20s ${APP_EXEC} -- server ${SERVER_ARGS} &> test.tmp &
 SERVER_PID=$!
+trap "kill ${SERVER_PID}; exit ${EXIT_CODE}" SIGINT
 sleep 1
 
 echo -e "${YELLOW}<Client>${NC}"

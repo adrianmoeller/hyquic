@@ -13,6 +13,11 @@ namespace hyquic
         {
         }
 
+        explicit error(std::string msg, int err_no)
+            : msg(std::string(strerror(err_no)) + ": " + msg)
+        {
+        }
+
         inline const char* what() const noexcept
         {
             return msg.c_str();

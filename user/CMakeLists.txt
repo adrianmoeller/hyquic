@@ -17,6 +17,8 @@ target_link_libraries(hyquic INTERFACE quic)
 include(CTest)
 enable_testing()
 
+set(SERVER_CLIENT_TEST_RUNNER sudo ../tests/run_test.sh -s "0.0.0.0 1234 ../tests/keys/server-key.pem ../tests/keys/server-cert.pem" -c "127.0.0.1 1234")
+
 add_executable(buffer_test tests/buffer_test.cpp)
 target_link_libraries(buffer_test PUBLIC hyquic)
 
@@ -24,7 +26,7 @@ add_executable(sample_test tests/sample_test.cpp)
 target_link_libraries(sample_test PUBLIC hyquic)
 
 add_test(buffer_test buffer_test)
-add_test(sample_test ../tests/run_test.sh -s "t" -c "t" sample_test)
+add_test(sample_test ${SERVER_CLIENT_TEST_RUNNER} sample_test)
 
 # PACKAGING
 

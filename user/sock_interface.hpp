@@ -2,10 +2,9 @@
 #define __HYQUIC_SOCK_INTERFACE_HPP__
 
 #include <iostream>
-#include <cstring>
 #include <functional>
 #include <vector>
-#include <queue>
+#include <list>
 #include <linux/quic.h>
 #include <linux/hyquic.h>
 #include <sys/socket.h>
@@ -14,6 +13,48 @@
 
 namespace hyquic
 {
+namespace si
+{
+    inline int socket_socket(int domain, int type)
+    {
+        return socket(domain, type, IPPROTO_QUIC);
+    }
+
+    inline int socket_connect(int sockfd, const sockaddr *addr, socklen_t len)
+    {
+        return connect(sockfd, addr, len);
+    }
+
+    inline int socket_bind(int sockfd, const sockaddr *addr, socklen_t len)
+    {
+        return bind(sockfd, addr, len);
+    }
+
+    inline int socket_listen(int sockfd, int n)
+    {
+        return listen(sockfd, n);
+    }
+
+    inline int socket_accept(int sockfd, sockaddr *addr, socklen_t *len)
+    {
+        return accept(sockfd, addr, len);
+    }
+
+    inline int socket_setsockopt(int sockfd, int optname, const void *optval, socklen_t optlen)
+    {
+        return setsockopt(sockfd, SOL_QUIC, optname, optval, optlen);
+    }
+
+    inline int socket_getsockopt(int sockfd, int optname, void *optval, socklen_t *optlen)
+    {
+        return getsockopt(sockfd, SOL_QUIC, optname, optval, optlen);
+    }
+
+    inline int socket_close(int sockfd)
+    {
+        return close(sockfd);
+    }
+
     int set_transport_parameter(int sockfd, buffer &&param, const std::vector<hyquic_frame_details> &frame_details_list)
     {
         size_t num_frame_details = frame_details_list.size();
@@ -26,7 +67,7 @@ namespace hyquic
             cursor.push(frame_details);
         cursor.push_buff(std::move(param));
 
-        return setsockopt(sockfd, SOL_QUIC, HYQUIC_SOCKOPT_TRANSPORT_PARAM, buff.data, buff.len);
+        return socket_setsockopt(sockfd, HYQUIC_SOCKOPT_TRANSPORT_PARAM, buff.data, buff.len);
     }
 
     static inline buffer assemble_frame_data(std::list<buffer> &frames)
@@ -44,6 +85,8 @@ namespace hyquic
             cursor.push_int<NATIVE>(frame_buff.len, 4);
             cursor.push_buff(std::move(frame_buff));
         }
+
+        return buff;
     }
 
     int send_frames(int sockfd, std::list<buffer> &frames)
@@ -136,6 +179,7 @@ namespace hyquic
         }
         return err;
     }
+} // namespace si
 } // namespace hyquic
 
 

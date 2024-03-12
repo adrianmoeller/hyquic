@@ -25,8 +25,8 @@ namespace hyquic
     class extension
     {
     public:
-        virtual buffer transport_parameter() = 0;
-        virtual std::vector<hyquic_frame_details>& frame_details_list() = 0;
+        virtual inline buffer transport_parameter() = 0;
+        virtual const std::vector<hyquic_frame_details>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
     };
@@ -44,6 +44,8 @@ namespace hyquic
 
         ~hyquic()
         {
+            si::socket_close(sockfd);
+
             recv_context.stop();
             common_context.stop();
             recv_context.join();
@@ -64,12 +66,36 @@ namespace hyquic
                 extension_reg.insert({frame_details.frame_type, std::ref(ext)});
             }
 
-            int err = set_transport_parameter(sockfd, ext.transport_parameter(), ext.frame_details_list());
+            int err = si::set_transport_parameter(sockfd, ext.transport_parameter(), ext.frame_details_list());
             if (err = -EINVAL)
                 throw invalid_data_error("Setting transport parameter got invalid data.");
             else
                 throw network_error("Setting transport parameter failed.");
         }
+
+        inline int set_socket_option(int optname, const void *optval, socklen_t optlen)
+        {
+            return si::socket_setsockopt(sockfd, optname, optval, optlen);
+        }
+
+        inline int get_socket_option(int optname, void *optval, socklen_t *optlen)
+        {
+            return si::socket_getsockopt(sockfd, optname, optval, optlen);
+        }
+
+        inline int send_frames(std::list<buffer> &frames)
+        {
+            return si::send_frames(sockfd, frames);
+        }
+
+        inline int close()
+        {
+            return si::socket_close(sockfd);
+        }
+
+    protected:
+        bool running;
+        int sockfd;
 
         void run()
         {
@@ -78,10 +104,6 @@ namespace hyquic
                 recv_loop();
             });
         }
-
-    protected:
-        bool running;
-        int sockfd;
 
     private:
         boost::asio::thread_pool common_context;
@@ -113,7 +135,7 @@ namespace hyquic
             }
         } hyquic_data_frag;
 
-        receive_ops recv_ops {
+        si::receive_ops recv_ops {
             .recv_stream_data = [this](buffer&& data, const quic_stream_info& info) {
                 return hyquic::recv_stream_data(std::move(data), info);
             },
@@ -167,8 +189,10 @@ namespace hyquic
         void recv_loop()
         {
             int err;
-            err = receive(sockfd, recv_ops, RECV_BUFF_INIT_SIZE);
+            err = si::receive(sockfd, recv_ops, RECV_BUFF_INIT_SIZE);
             if (err < 0)
+                throw network_error("Socket receive failed.", err);
+            if (err = 0)
                 return;
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
