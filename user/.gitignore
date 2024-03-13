@@ -34,3 +34,4 @@
 /build/
 /tests/keys/*.pem
 /tests/keys/server.ext
+/Testing/Temporary/

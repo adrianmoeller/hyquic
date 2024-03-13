@@ -5,6 +5,9 @@
 #include "intercom.h"
 #include "hybrid.h"
 
+#define _HQ_MSG(___sk, ___msg) "[HyQUIC] %s@%s: "___msg"\n",quic_is_serv(___sk)?"server":"client",__func__
+#define HQ_MSG(__sk, __msg) _HQ_MSG(__sk, __msg)
+
 struct hyquic_frame_details_entry {
     struct hlist_node node;
     struct hyquic_frame_details details;
@@ -17,6 +20,7 @@ inline void hyquic_enable(struct sock *sk)
     if (hyquic->enabled)
         return;
     hyquic->enabled = true;
+    pr_debug(HQ_MSG(sk, "enabled"));
 }
 
 static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details_table)
@@ -53,6 +57,7 @@ int hyquic_init(struct hyquic_adapter *hyquic, struct sock *sk)
     if (hyquic_frame_details_table_init(&hyquic->frame_details_table))
         return -ENOMEM;
 
+    pr_debug(HQ_MSG(sk, "done"));
     return 0;
 }
 
@@ -93,6 +98,8 @@ void hyquic_free(struct hyquic_adapter *hyquic)
     __skb_queue_purge(&hyquic->unkwn_frames_fix_inqueue);
     __skb_queue_purge(&hyquic->unkwn_frames_var_deferred);
     hyquic_frame_details_table_free(&hyquic->frame_details_table);
+
+    pr_debug(HQ_MSG(hyquic->sk, "done"));
 }
 
 inline void hyquic_transport_params_add(struct hyquic_transport_param *param, struct list_head *param_list)
@@ -121,7 +128,36 @@ struct hyquic_transport_param* hyquic_transport_param_create(void *data, size_t 
     return param;
 }
 
-static struct sk_buff* hyquic_frame_create_raw(uint8_t **pdata, uint32_t *pdata_length, uint64_t *pframe_seqnum)
+int hyquic_handle_transport_parameter_remote(struct hyquic_adapter *hyquic, uint64_t type, uint8_t **pp, uint32_t *plen)
+{
+    uint32_t type_length = quic_var_len(type);
+    uint8_t *tp_start = *pp - type_length;
+    size_t tp_length;
+    uint64_t value_length;
+    void *param;
+    struct hyquic_transport_param *entry;
+
+    if (!quic_get_var(pp, plen, &value_length)) {
+        pr_debug(HQ_MSG(hyquic->sk, "invalid value length encoding"));
+        return -EINVAL;
+    }
+    tp_length = type_length + value_length;
+    param = kmemdup(tp_start, tp_length, GFP_KERNEL);
+    if (!param)
+        return -ENOMEM;
+    entry = hyquic_transport_param_create(param, tp_length);
+    if (!entry)
+        return -ENOMEM;
+    hyquic_transport_params_add(entry, &hyquic->transport_params_remote);
+
+    *pp += value_length;
+    *plen -= value_length;
+
+    pr_debug(HQ_MSG(hyquic->sk, "done, id=%llu"), type);
+    return 0;
+}
+
+static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **pdata, uint32_t *pdata_length, uint64_t *pframe_seqnum)
 {
     uint32_t frame_length;
     uint64_t frame_type;
@@ -144,6 +180,8 @@ static struct sk_buff* hyquic_frame_create_raw(uint8_t **pdata, uint32_t *pdata_
     snd_cb->common.frame_type = frame_type;
     snd_cb->usrquic_frame_seqnum = *pframe_seqnum;
     *pframe_seqnum += 1;
+
+    pr_debug(HQ_MSG(sk, "done, type=%llu"), frame_type);
     return skb;
 }
 
@@ -152,16 +190,22 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
     struct sk_buff *skb;
     uint64_t frame_seqnum = info->first_frame_seqnum;
 
-    if (!quic_is_established(sk))
+    if (!quic_is_established(sk)) {
+        pr_debug(HQ_MSG(sk, "cannot send user-quic frames when connection is not established"));
         return -EINVAL;
+    }
 
     while (data_length) {
-        skb = hyquic_frame_create_raw(&data, &data_length, &frame_seqnum);
-        if (!skb)
+        skb = hyquic_frame_create_raw(sk, &data, &data_length, &frame_seqnum);
+        if (!skb) {
+            pr_debug(HQ_MSG(sk, "cannot create frame from user-quic data"));
             return -EINVAL;
+        }
 
         hyquic_outq_raw_tail(sk, skb, false);
     }
+
+    pr_debug(HQ_MSG(sk, "done"));
     return 0;
 }
 
@@ -186,10 +230,13 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
                 __skb_queue_tail(&sk->sk_receive_queue, fskb);
                 sk->sk_data_ready(sk);
                 len = 0;
+                pr_debug(HQ_MSG(sk, "forwarding remaining packet payload to user-quic, type=%llu"), frame_type);
             } else {
                 frame_len = frame_type_len + frame_details->fixed_length;
-                if (frame_len > len)
+                if (frame_len > len) {
+                    pr_debug(HQ_MSG(sk, "remaining payload is shorter than advertised frame length, type=%llu"), frame_type);
                     return -EINVAL;
+                }
                 fskb = alloc_skb(frame_len, GFP_ATOMIC);
                 if (!fskb)
                     return -ENOMEM;
@@ -197,6 +244,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
                 __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
                 skb_pull(skb, frame_len);
                 len -= frame_len;
+                pr_debug(HQ_MSG(sk, "forwarding frame to user-quic, type=%llu"), frame_type);
             }
 
             if (frame_details->ack_eliciting) {
@@ -240,6 +288,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
 
     hyquic_flush_unkwn_frames_inqueue(sk);
 
+    pr_debug(HQ_MSG(sk, "done"));
     return 0;
 }
 
@@ -249,16 +298,23 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
     struct sk_buff_head *head;
     struct hyquic_data_raw_frames_var_recv *details;
     uint8_t level = 0;
+    bool found = false;
     int err;
 
     head = &quic_hyquic(sk)->unkwn_frames_var_deferred;
     skb_queue_walk_safe(head, cursor, tmp) {
         details = &HYQUIC_RCV_CB(cursor)->hyquic_data_details.raw_frames_var;
         if (details->msg_id == info->msg_id) {
+            found = true;
             __skb_unlink(cursor, head);
             break;
         }
     }
+    if (!found) {
+        pr_debug(HQ_MSG(sk, "cannot find deferred packet payload, id=%llu"), info->msg_id);
+        return -EINVAL;
+    }
+    
     skb_pull(cursor, info->processed_length);
 
     if (info->ack_eliciting) {
@@ -288,6 +344,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
         }
     }
 
+    pr_debug(HQ_MSG(sk, "done, id=%llu"), info->msg_id);
     return 0;
 }
 
@@ -297,12 +354,16 @@ int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, stru
     uint8_t *data = (uint8_t*) kmalloc_array(info->data_length, sizeof(uint8_t), GFP_KERNEL);
 
     if (iov_iter_count(msg_iter) < info->data_length) {
+        pr_debug(HQ_MSG(sk, "remaining payload is shorter than advertised data length"));
         err = -EINVAL;
         goto out;
     }
 
-    if (!copy_from_iter_full(data, info->data_length, msg_iter))
+    if (!copy_from_iter_full(data, info->data_length, msg_iter)) {
+        pr_debug(HQ_MSG(sk, "cannot read data from payload"));
+        err = -EINVAL;
         goto out;
+    }
 
     switch (info->type) {
     case HYQUIC_DATA_RAW_FRAMES:
@@ -313,6 +374,7 @@ int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, stru
         break;
     default:
         err = -EINVAL;
+        pr_debug(HQ_MSG(sk, "unknown user-quic-data type %i"), info->type);
         break;
     }
     
@@ -335,6 +397,7 @@ int hyquic_frame_details_create(struct hyquic_adapter *hyquic, struct hyquic_fra
     head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_details->frame_type);
     hlist_add_head(&entry->node, &head->head);
 
+    pr_debug(HQ_MSG(hyquic->sk, "done, type=%llu"), frame_details->frame_type);
     return 0;
 }
 
@@ -380,16 +443,20 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         __skb_queue_tail(&sk->sk_receive_queue, fskb);
         sk->sk_data_ready(sk);
         *var_frame_encountered = true;
+        pr_debug(HQ_MSG(sk, "forwarding remaining packet payload to user-quic, type=%llu"), frame_details->frame_type);
     } else {
         frame_len = quic_var_len(frame_details->frame_type) + frame_details->fixed_length;
-        if (frame_len > remaining_pack_len)
+        if (frame_len > remaining_pack_len) {
+            pr_debug(HQ_MSG(sk, "remaining payload is shorter than advertised frame length, type=%llu"), frame_details->frame_type);
             return -EINVAL;
+        }
         fskb = alloc_skb(frame_len, GFP_ATOMIC);
         if (!fskb)
             return -ENOMEM;
         quic_put_data(fskb->data, skb->data, frame_len);
         __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
         ret = frame_len;
+        pr_debug(HQ_MSG(sk, "forwarding frame to user-quic, type=%llu"), frame_details->frame_type);
     }
 
     if (frame_details->ack_eliciting) {
@@ -451,6 +518,8 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);
+
+    pr_debug(HQ_MSG(sk, "done"));
     return 0;
 }
 
@@ -469,5 +538,7 @@ int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);
+
+    pr_debug(HQ_MSG(sk, "done, type=%u"), QUIC_SND_CB(skb)->frame_type);
     return 0;
 }

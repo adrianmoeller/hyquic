@@ -67,10 +67,8 @@ namespace hyquic
             }
 
             int err = si::set_transport_parameter(sockfd, ext.transport_parameter(), ext.frame_details_list());
-            if (err = -EINVAL)
-                throw invalid_data_error("Setting transport parameter got invalid data.");
-            else
-                throw network_error("Setting transport parameter failed.");
+            if (err)
+                throw network_error("Setting transport parameter failed.", err);
         }
 
         inline int set_socket_option(int optname, const void *optval, socklen_t optlen)

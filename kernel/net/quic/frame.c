@@ -1391,6 +1391,7 @@ static int quic_get_param(u64 *pdest, u8 **pp, u32 *plen)
 int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_param *params,
 					u8 *data, u32 len)
 {
+	int err;
 	struct quic_dest_connection_id *dcid;
 	u64 type, valuelen;
 	u8 *p = data;
@@ -1489,22 +1490,9 @@ int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_p
 			break;
 		default:
 			if (quic_hyquic(sk)->enabled) {
-				uint32_t type_length = quic_var_len(type);
-				uint8_t *tp_start = p - type_length;
-				size_t tp_length;
-				void *param;
-				struct hyquic_transport_param *entry;
-
-				if (!quic_get_var(&p, &len, &valuelen))
-					return -1;
-				tp_length = type_length + valuelen;
-				param = kmemdup(tp_start, tp_length, GFP_KERNEL);
-				if (!param)
-					return -ENOMEM;
-				entry = hyquic_transport_param_create(param, tp_length);
-				if (!entry)
-					return -ENOMEM;
-				hyquic_transport_params_add(entry, &quic_hyquic(sk)->transport_params_remote);
+				err = hyquic_handle_transport_parameter_remote(quic_hyquic(sk), type, &p, &len);
+				if (err)
+					return err;
 				break;
 			}
 
