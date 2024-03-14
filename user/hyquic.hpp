@@ -16,6 +16,7 @@ extern "C" {
 #include <list>
 #include <functional>
 #include <unordered_map>
+#include <atomic>
 #include "buffer.hpp"
 #include "sock_interface.hpp"
 #include "errors.hpp"
@@ -38,13 +39,14 @@ namespace hyquic
     {
     public:
         hyquic()
-            : running(false), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
+            : running(false), closed(false), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
         {
         }
 
         ~hyquic()
         {
             si::socket_close(sockfd);
+            closed.store(true);
 
             recv_context.stop();
             common_context.stop();
@@ -93,6 +95,7 @@ namespace hyquic
 
     protected:
         bool running;
+        std::atomic<bool> closed;
         int sockfd;
 
         void run()
@@ -188,10 +191,16 @@ namespace hyquic
         {
             int err;
             err = si::receive(sockfd, recv_ops, RECV_BUFF_INIT_SIZE);
-            if (err < 0)
-                throw network_error("Socket receive failed.", err);
-            if (err = 0)
+            if (err < 0) {
+                if (closed.load())
+                    return;
+                else
+                    throw network_error("Socket receive failed.", err);
+            }
+            if (err = 0) {
+                closed.store(true);
                 return;
+            }
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
             });

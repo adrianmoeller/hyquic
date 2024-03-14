@@ -6,12 +6,12 @@ if [ "$1" = "clean" ]; then
 fi
 
 # create CA and install it
-openssl req -newkey rsa:2048 -nodes -keyout ca-key.pem -x509 -days 365 -out ca-cert.pem -subj "/C=DE/ST=Hesse/L=DA/O=TUD/CN=Adrian Moeller/emailAddress=adrian.moeller@stud.tu-darmstadt.de"
+openssl req -newkey rsa:2048 -nodes -keyout ca-key-u.pem -x509 -days 365 -out ca-cert-u.pem -subj "/C=DE/ST=Hesse/L=DA/O=TUD/CN=Adrian Moeller/emailAddress=adrian.moeller@stud.tu-darmstadt.de"
 if [ -d /etc/pki/ca-trust/source/anchors/ ]; then
-	cp ca-cert.pem /etc/pki/ca-trust/source/anchors/ca-cert.pem
+	cp ca-cert-u.pem /etc/pki/ca-trust/source/anchors/ca-cert-u.pem
 	update-ca-trust
 elif [ -d /usr/local/share/ca-certificates/ ]; then
-	cp ca-cert.pem /usr/local/share/ca-certificates/ca-cert.crt
+	cp ca-cert-u.pem /usr/local/share/ca-certificates/ca-cert-u.crt
 	update-ca-certificates
 fi
 
@@ -25,9 +25,9 @@ DNS.1 = server.test
 EOF
 
 # create server cert and sign it
-openssl req -newkey rsa:2048 -nodes -keyout server-key.pem -out server-req.pem -subj "/C=DE/ST=Hesse/L=DA/O=TUD/CN=Adrian Moeller/emailAddress=adrian.moeller@stud.tu-darmstadt.de"
-openssl x509 -req -days 186 -set_serial 01 -in server-req.pem -out server-cert.pem -CA ca-cert.pem -CAkey ca-key.pem -extfile server.ext
+openssl req -newkey rsa:2048 -nodes -keyout server-key-u.pem -out server-req-u.pem -subj "/C=DE/ST=Hesse/L=DA/O=TUD/CN=Adrian Moeller/emailAddress=adrian.moeller@stud.tu-darmstadt.de"
+openssl x509 -req -days 186 -set_serial 01 -in server-req-u.pem -out server-cert-u.pem -CA ca-cert-u.pem -CAkey ca-key-u.pem -extfile server.ext
 
 # create client cert and sign it
-openssl req -newkey rsa:2048 -nodes -keyout client-key.pem -out client-req.pem -subj "/C=DE/ST=Hesse/L=DA/O=TUD/CN=Adrian Moeller/emailAddress=adrian.moeller@stud.tu-darmstadt.de"
-openssl x509 -req -days 186 -set_serial 01 -in client-req.pem -out client-cert.pem -CA ca-cert.pem -CAkey ca-key.pem
+openssl req -newkey rsa:2048 -nodes -keyout client-key-u.pem -out client-req-u.pem -subj "/C=DE/ST=Hesse/L=DA/O=TUD/CN=Adrian Moeller/emailAddress=adrian.moeller@stud.tu-darmstadt.de"
+openssl x509 -req -days 186 -set_serial 01 -in client-req-u.pem -out client-cert-u.pem -CA ca-cert-u.pem -CAkey ca-key-u.pem

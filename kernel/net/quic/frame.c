@@ -1293,14 +1293,15 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_
 {
 	int ret;
 	int64_t len = pki->length;
-	u8 type;
+	uint64_t type;
+	uint8_t type_len;
 	struct hyquic_frame_details *frame_details;
 
 	if (!len)
 		return -EINVAL;
 
 	while (len > 0) {
-		type = *(u8 *)(skb->data);
+		type_len = quic_peek_var(skb->data, &type);
 
 		if (quic_hyquic(sk)->enabled) {
 			frame_details = hyquic_frame_details_get(quic_hyquic(sk), type);
@@ -1314,20 +1315,20 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_
 			}
 		}
 
-		skb_pull(skb, 1);
-		len--;
+		skb_pull(skb, type_len);
+		len -= type_len;
 
 		if (type > QUIC_FRAME_MAX) {
-			pr_err_once("[QUIC] %s unsupported frame %x\n", __func__, type);
+			pr_err_once("[QUIC] %s unsupported frame %llu\n", __func__, type);
 			return -EPROTONOSUPPORT;
 		} else if (!type) { /* skip padding */
 			skb_pull(skb, len);
 			return 0;
 		}
-		pr_debug("[QUIC] %s type: %x level: %d\n", __func__, type, QUIC_RCV_CB(skb)->level);
+		pr_debug("[QUIC] %s type: %llu level: %d\n", __func__, type, QUIC_RCV_CB(skb)->level);
 		ret = quic_frame_ops[type].frame_process(sk, skb, type);
 		if (ret < 0) {
-			pr_warn("[QUIC] %s type: %x level: %d err: %d\n", __func__, type,
+			pr_warn("[QUIC] %s type: %llu level: %d err: %d\n", __func__, type,
 				QUIC_RCV_CB(skb)->level, ret);
 			return ret;
 		}
@@ -1490,7 +1491,7 @@ int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_p
 			break;
 		default:
 			if (quic_hyquic(sk)->enabled) {
-				err = hyquic_handle_transport_parameter_remote(quic_hyquic(sk), type, &p, &len);
+				err = hyquic_handle_remote_transport_parameter(quic_hyquic(sk), type, &p, &len);
 				if (err)
 					return err;
 				break;
@@ -1530,6 +1531,7 @@ int quic_frame_get_transport_params_ext(struct sock *sk, struct quic_transport_p
 {
 	struct quic_connection_id *scid = &quic_source(sk)->active->id;
 	u8 *p = data, token[16];
+	int err;
 
 	if (quic_is_serv(sk)) {
 		p = quic_put_conn_id(p, QUIC_TRANSPORT_PARAM_ORIGINAL_DESTINATION_CONNECTION_ID,
@@ -1607,10 +1609,9 @@ int quic_frame_get_transport_params_ext(struct sock *sk, struct quic_transport_p
 
 	if (quic_hyquic(sk)->enabled)
 	{
-		struct hyquic_transport_param *cursor;
-		hyquic_transport_param_for_each(cursor, &quic_hyquic(sk)->transport_params_local) {
-			p = quic_put_data(p, cursor->param, cursor->length);
-		}
+		err = hyquic_transfer_local_transport_parameters(quic_hyquic(sk), &p, data);
+		if (err)
+			return err;
 	}
 
 	*len = p - data;

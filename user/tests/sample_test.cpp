@@ -13,7 +13,7 @@ extern "C" {
 using namespace hyquic;
 
 #define BCE(L,R) BOOST_CHECK_EQUAL(L,R)
-#define BAZ(expr) BOOST_ASSERT(!(expr))
+#define BAZ(expr) BOOST_CHECK_EQUAL(expr,0)
 
 class simple_extension : public extension
 {
@@ -91,18 +91,14 @@ void test_client(int argc, char *argv[])
 
     hyquic_client client(argv[2], atoi(argv[3]));
 
-    quic_transport_param transport_param = {};
-    transport_param.payload_cipher_type = TLS_CIPHER_AES_GCM_256;
-    BAZ(client.set_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &transport_param, sizeof(transport_param)));
-
     simple_extension ext(client);
     client.register_extension(ext);
 
     client.connect_to_server();
 
-    client.close();
+    sleep(2);
 
-    sleep(1);
+    client.close();
 
     BOOST_ASSERT(ext.first_frame_received);
 }
@@ -113,10 +109,6 @@ void test_server(int argc, char *argv[])
 
     hyquic_server server(argv[2], atoi(argv[3]));
     hyquic_server_connection connection = server.accept_connection();
-
-    quic_transport_param transport_param = {};
-    transport_param.payload_cipher_type = TLS_CIPHER_AES_GCM_256;
-    BAZ(connection.set_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &transport_param, sizeof(transport_param)));
 
     simple_extension ext(connection);
     connection.register_extension(ext);

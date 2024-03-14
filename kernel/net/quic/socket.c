@@ -1353,37 +1353,8 @@ static int hyquic_sock_set_options(struct sock *sk, struct hyquic_options *optio
 
 static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t length)
 {
-	struct hyquic_adapter *hyquic = quic_hyquic(sk);
-	struct hyquic_transport_param *entry;
-	void *param_data;
-	uint32_t param_data_length;
-	struct hyquic_frame_details *frame_details;
-	size_t num_frame_details;
-	void *p = data;
-	int i, err;
-
 	hyquic_enable(sk);
-
-	num_frame_details = *((size_t*) p);
-	p += sizeof(size_t);
-	for (i = 0; i < num_frame_details; i++) {
-		frame_details = p;
-		err = hyquic_frame_details_create(hyquic, frame_details);
-		if (err)
-			return err;
-		p += sizeof(struct hyquic_frame_details);
-	}
-
-	param_data_length = length - (p - data);
-	param_data = kmemdup(p, param_data_length, GFP_KERNEL);
-	if (!param_data)
-		return -ENOMEM;
-	entry = hyquic_transport_param_create(param_data, length);
-	if (!entry)
-		return -ENOMEM;
-	hyquic_transport_params_add(entry, &hyquic->transport_params_local);
-
-	return 0;
+	return hyquic_set_local_transport_parameter(quic_hyquic(sk), data, length);
 }
 
 static int quic_setsockopt(struct sock *sk, int level, int optname,
@@ -1529,7 +1500,7 @@ static int quic_sock_get_transport_params_ext(struct sock *sk, int len,
 					      char __user *optval, int __user *optlen)
 {
 	struct quic_transport_param *param = quic_local(sk);
-	u8 data[256];
+	u8 data[512];
 	u32 datalen;
 
 	if (quic_frame_get_transport_params_ext(sk, param, data, &datalen))
@@ -1677,44 +1648,14 @@ static int quic_sock_get_connection_close(struct sock *sk, int len, char __user 
 
 static int hyquic_sock_get_transport_param(struct sock *sk, int len, char __user *optval, int __user *optlen)
 {
-	struct hyquic_adapter *hyquic = quic_hyquic(sk);
-	size_t total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
-	char __user *pos = optval;
-	struct hyquic_transport_param *cursor;
-
 	hyquic_enable(sk);
-
-	if (len < total_params_length)
-		return -EINVAL;
-
-	len = total_params_length;
-	if (put_user(len, optlen))
-		return -EFAULT;
-	
-	hyquic_transport_param_for_each(cursor, &hyquic->transport_params_remote) {
-		if (copy_to_user(pos, cursor->param, cursor->length))
-			return -EINVAL;
-		pos += cursor->length;
-	}
-	return 0;
+	return hyquic_get_remote_transport_parameters(quic_hyquic(sk), len, optval, optlen);
 }
 
 static int hyquic_sock_get_transport_param_len(struct sock *sk, int len, char __user *optval, int __user *optlen)
 {
-	struct hyquic_adapter *hyquic = quic_hyquic(sk);
-	size_t total_params_length;
-
 	hyquic_enable(sk);
-
-	if (len < sizeof(size_t))
-		return -EINVAL;
-
-	len = sizeof(size_t);
-	total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
-
-	if (put_user(len, optlen) || copy_to_user(optval, &total_params_length, len))
-		return -EFAULT;
-	return 0;
+	return hyquic_get_remote_transport_parameters_length(quic_hyquic(sk), len, optval, optlen);
 }
 
 static int quic_getsockopt(struct sock *sk, int level, int optname,
