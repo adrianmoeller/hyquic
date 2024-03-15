@@ -25,11 +25,21 @@ namespace hyquic
 {
     class extension
     {
-    public:
+    protected:
+        buffer remote_param_content;
+
         virtual inline buffer transport_parameter() = 0;
         virtual const std::vector<hyquic_frame_details>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
+    
+    private:
+        void set_remote_transport_parameter(buffer &&content)
+        {
+            remote_param_content = std::move(content);
+        }
+
+        friend class hyquic;
     };
 
 #define RECV_STREAM_BUFF_INIT_SIZE  2048
@@ -69,9 +79,18 @@ namespace hyquic
                 frame_details_reg.insert({frame_details.frame_type, frame_details});
             }
 
-            int err = si::set_transport_parameter(sockfd, ext.transport_parameter(), ext.frame_details_list());
+            buffer transport_param = ext.transport_parameter();
+            buffer_view transport_param_view(transport_param);
+            uint64_t transport_param_id;
+            transport_param_view.pull_var(transport_param_id);
+
+            if (tp_id_to_extension.contains(transport_param_id))
+                throw extension_config_error("A transport parameter can only be managed by one extension at a time.");
+            tp_id_to_extension.insert({transport_param_id, std::ref(ext)});
+
+            int err = si::set_transport_parameter(sockfd, std::move(transport_param), ext.frame_details_list());
             if (err)
-                throw network_error("Setting transport parameter failed.", err);
+                throw network_error("Setting local transport parameter failed.", err);
         }
 
         inline int set_socket_option(int optname, const void *optval, socklen_t optlen)
@@ -87,6 +106,20 @@ namespace hyquic
         inline int send_frames(std::list<buffer> &frames)
         {
             return si::send_frames(sockfd, frames);
+        }
+
+        int send_msg()
+        {
+            // TODO
+
+            return 0;
+        }
+
+        int receive_msg()
+        {
+            // TODO
+
+            return 0;
         }
 
         inline int close()
@@ -107,11 +140,53 @@ namespace hyquic
             });
         }
 
+        void collect_remote_transport_parameter()
+        {
+            int err;
+
+            uint32_t total_transport_params_length;
+            socklen_t len = sizeof(total_transport_params_length);
+            err = si::socket_getsockopt(sockfd, HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN, &total_transport_params_length, &len);
+            if (err)
+                throw network_error("Getting remote transport parameters length failed.", err);
+
+            buffer transport_parameters(total_transport_params_length);
+            err = si::socket_getsockopt(sockfd, HYQUIC_SOCKOPT_TRANSPORT_PARAM, transport_parameters.data, &total_transport_params_length);
+            if (err)
+                throw network_error("Getting remote transport parameters failed.", err);
+            assert(transport_parameters.len == total_transport_params_length);
+
+            buffer_view cursor(transport_parameters);
+            while(!cursor.end()) {
+                buffer_view tp_beginning(cursor);
+                uint64_t tp_length = 0;
+                uint8_t var_length;
+
+                uint64_t tp_id;
+                var_length = cursor.pull_var(tp_id);
+                assert(!var_length);
+                tp_length += var_length;
+
+                if (!tp_id_to_extension.contains(tp_id))
+                    continue;
+
+                uint64_t tp_content_length;
+                var_length = cursor.pull_var(tp_content_length);
+                assert(!var_length);
+                tp_length += var_length + tp_content_length;
+                cursor.prune(tp_content_length);
+
+                extension &ext = tp_id_to_extension.at(tp_id);
+                ext.set_remote_transport_parameter(tp_beginning.copy(tp_length));
+            }
+        }
+
     private:
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
         stream_data_buff recv_buff;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
+        std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
         std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
 
         struct {
@@ -254,7 +329,7 @@ namespace hyquic
                 }
                 int err = si::send_notify_bytes_parsed(sockfd, parsing_results);
                 if (err)
-                    throw network_error("Cannot send notification.", err);
+                    throw network_error("Sending parsed bytes notification failed.", err);
                 break;
             }
             case HYQUIC_DATA_LOST_FRAMES: {

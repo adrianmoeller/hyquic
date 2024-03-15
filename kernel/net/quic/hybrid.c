@@ -110,10 +110,10 @@ static inline void hyquic_transport_params_add(struct hyquic_transport_param *pa
     list_add_tail(&param->list, param_list);
 }
 
-static inline size_t hyquic_transport_params_total_length(struct list_head *param_list)
+static inline uint32_t hyquic_transport_params_total_length(struct list_head *param_list)
 {
     struct hyquic_transport_param *cursor;
-	size_t total_length = 0;
+	uint32_t total_length = 0;
 
 	hyquic_transport_param_for_each(cursor, param_list) {
 		total_length += cursor->length;
@@ -169,12 +169,12 @@ int hyquic_set_local_transport_parameter(struct hyquic_adapter *hyquic, void *da
 
 int hyquic_get_remote_transport_parameters(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen)
 {
-    size_t total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
+    uint32_t total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
 	char __user *pos = optval;
 	struct hyquic_transport_param *cursor;
 
 	if (len < total_params_length) {
-        HQ_PR_ERR(hyquic->sk, "provided buffer too small, %lu bytes needed", total_params_length);
+        HQ_PR_ERR(hyquic->sk, "provided buffer too small, %u bytes needed", total_params_length);
 		return -EINVAL;
     }
 
@@ -194,12 +194,12 @@ int hyquic_get_remote_transport_parameters(struct hyquic_adapter *hyquic, int le
 
 int hyquic_get_remote_transport_parameters_length(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen)
 {
-    size_t total_params_length;
+    uint32_t total_params_length;
 
-    if (len < sizeof(size_t))
+    if (len < sizeof(total_params_length))
 		return -EINVAL;
 
-	len = sizeof(size_t);
+	len = sizeof(total_params_length);
 	total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
 
 	if (put_user(len, optlen) || copy_to_user(optval, &total_params_length, len))
