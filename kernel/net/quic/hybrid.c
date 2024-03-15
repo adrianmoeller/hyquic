@@ -414,11 +414,12 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
         }
     }
     if (!found) {
-        HQ_PR_ERR(sk, "cannot find deferred packet payload, id=%llu", info->msg_id);
+        HQ_PR_ERR(sk, "cannot find deferred packet payload, msg_id=%llu", info->msg_id);
         return -EINVAL;
     }
     
     skb_pull(cursor, info->processed_length);
+    HQ_PR_DEBUG(sk, "skipped %u bytes parsed by usrquic", info->processed_length);
 
     if (info->ack_eliciting) {
         details->ack_eliciting = true;
@@ -447,7 +448,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
         }
     }
 
-    HQ_PR_DEBUG(sk, "done, id=%llu", info->msg_id);
+    HQ_PR_DEBUG(sk, "done, msg_id=%llu", info->msg_id);
     return 0;
 }
 
@@ -462,7 +463,7 @@ int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, stru
         goto out;
     }
 
-    if (!copy_from_iter_full(data, info->data_length, msg_iter)) {
+    if (info->data_length && !copy_from_iter_full(data, info->data_length, msg_iter)) {
         HQ_PR_ERR(sk, "cannot read data from payload");
         err = -EINVAL;
         goto out;
@@ -546,7 +547,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         __skb_queue_tail(&sk->sk_receive_queue, fskb);
         sk->sk_data_ready(sk);
         *var_frame_encountered = true;
-        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu, len=%u", frame_details->frame_type, remaining_pack_len);
+        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu, len=%u, msg_id=%llu", frame_details->frame_type, remaining_pack_len, details->msg_id);
     } else {
         frame_len = quic_var_len(frame_details->frame_type) + frame_details->fixed_length;
         if (frame_len > remaining_pack_len) {
@@ -576,29 +577,35 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
 inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk)
 {
     struct sk_buff *skb;
-    struct hyquic_data_raw_frames_var_recv *details;
+    struct hyquic_rcv_cb *rcv_cb;
 
-    skb = skb_peek_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred);
-    if (!skb) {
-        HQ_PR_ERR(sk, "queue expected not empty");
+    skb_queue_reverse_walk(&sk->sk_receive_queue, skb) {
+        rcv_cb = HYQUIC_RCV_CB(skb);
+        if (rcv_cb->hyquic_data_type != HYQUIC_DATA_RAW_FRAMES_VAR)
+            continue;
+
+        rcv_cb->hyquic_data_details.raw_frames_var.ack_timer_started = true;
         return;
     }
-    details = &HYQUIC_RCV_CB(skb)->hyquic_data_details.raw_frames_var;
-    details->ack_timer_started = true;
+
+    HQ_PR_ERR(sk, "no remaining packet in receive queue");
 }
 
 inline void hyquic_frame_var_notify_ack_sent(struct sock *sk)
 {
     struct sk_buff *skb;
-    struct hyquic_data_raw_frames_var_recv *details;
+    struct hyquic_rcv_cb *rcv_cb;
 
-    skb = skb_peek_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred);
-    if (!skb) {
-        HQ_PR_ERR(sk, "queue expected not empty");
+    skb_queue_reverse_walk(&sk->sk_receive_queue, skb) {
+        rcv_cb = HYQUIC_RCV_CB(skb);
+        if (rcv_cb->hyquic_data_type != HYQUIC_DATA_RAW_FRAMES_VAR)
+            continue;
+
+        rcv_cb->hyquic_data_details.raw_frames_var.ack_sent = true;
         return;
     }
-    details = &HYQUIC_RCV_CB(skb)->hyquic_data_details.raw_frames_var;
-    details->ack_sent = true;
+
+    HQ_PR_ERR(sk, "no remaining packet in receive queue");
 }
 
 int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)

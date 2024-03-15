@@ -252,8 +252,9 @@ namespace hyquic
                     frame_type_len = buff_view.pull_var(frame_type);
                     assert(frame_type_len);
                 }
-                if (si::send_notify_bytes_parsed(sockfd, parsing_results))
-                    throw network_error("Cannot send notification.");
+                int err = si::send_notify_bytes_parsed(sockfd, parsing_results);
+                if (err)
+                    throw network_error("Cannot send notification.", err);
                 break;
             }
             case HYQUIC_DATA_LOST_FRAMES: {
