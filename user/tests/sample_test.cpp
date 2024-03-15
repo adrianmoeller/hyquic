@@ -7,6 +7,8 @@ extern "C" {
 
 #include <sys/socket.h>
 #include <iostream>
+#include <mutex>
+#include <condition_variable>
 #include <hyquic_client.hpp>
 #include <hyquic_server.hpp>
 
@@ -18,10 +20,12 @@ using namespace hyquic;
 class simple_extension : public extension
 {
 public:
-    bool first_frame_received = false;
+    std::mutex mut;
+    std::condition_variable frame_cond;
+    bool first_frame_received;
 
     simple_extension(hyquic::hyquic &container)
-        : container(container)
+        : container(container), first_frame_received(false)
     {
         frame_details.push_back((hyquic_frame_details) {
             .frame_type = 0xb1,
@@ -60,15 +64,19 @@ public:
         uint64_t content;
         switch (type)
         {
-        case 0xb1:
+        case 0xb1: {
             content = frame_content.pull_int<NETWORK>(1);
             BCE(content, 42);
+            std::lock_guard<std::mutex> lk(mut);
             first_frame_received = true;
+            frame_cond.notify_all();
             return 1;
-        case 0xb2:
+        }
+        case 0xb2: {
             uint8_t content_len = frame_content.pull_var(content);
             BCE(content_len, 4);
             return content_len;
+        }
         }
         return 0;
     }
@@ -96,11 +104,15 @@ void test_client(int argc, char *argv[])
 
     client.connect_to_server();
 
-    sleep(2);
+    std::list<buffer> frames_to_send;
+    buffer frame_buff(3);
+    buffer_view cursor(frame_buff);
+    cursor.push_var(0xb1);
+    cursor.push_int<NETWORK>(42, 1);
+    frames_to_send.push_back(std::move(frame_buff));
+    BAZ(client.send_frames(frames_to_send));
 
     client.close();
-
-    BOOST_ASSERT(ext.first_frame_received);
 }
 
 void test_server(int argc, char *argv[])
@@ -115,13 +127,12 @@ void test_server(int argc, char *argv[])
 
     connection.connect_to_client(argv[4], argv[5]);
 
-    std::list<buffer> frames_to_send;
-    buffer frame_buff(3);
-    buffer_view cursor(frame_buff);
-    cursor.push_var(0xb1);
-    cursor.push_int<NETWORK>(42, 1);
-    frames_to_send.push_back(std::move(frame_buff));
-    BAZ(connection.send_frames(frames_to_send));
+    std::unique_lock<std::mutex> lk(ext.mut);
+    ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.first_frame_received;});
+    BOOST_ASSERT(ext.first_frame_received);
+    lk.unlock();
+
+    connection.close();
 }
 
 BOOST_AUTO_TEST_CASE(sample_test)

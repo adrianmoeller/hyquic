@@ -122,7 +122,7 @@ namespace si
             .first_frame_seqnum = 0 // TODO needed?
         };
 
-        return sendmsg(sockfd, &msg, 0);
+        return sendmsg(sockfd, &msg, 0) != buff.len;
     }
 
     struct receive_ops {

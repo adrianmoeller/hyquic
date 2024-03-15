@@ -189,18 +189,9 @@ namespace hyquic
 
         void recv_loop()
         {
-            int err;
-            err = si::receive(sockfd, recv_ops, RECV_BUFF_INIT_SIZE);
-            if (err < 0) {
-                if (closed.load())
-                    return;
-                else
-                    throw network_error("Socket receive failed.", err);
-            }
-            if (err = 0) {
-                closed.store(true);
+            int err = si::receive(sockfd, recv_ops, RECV_BUFF_INIT_SIZE);
+            if (err <= 0)
                 return;
-            }
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
             });

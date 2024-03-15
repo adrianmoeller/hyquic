@@ -348,7 +348,7 @@ static void quic_unhash(struct sock *sk)
 }
 
 static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_handshake_info *hinfo,
-			     struct quic_stream_info *sinfo, bool *has_hinfo)
+			     struct quic_stream_info *sinfo, bool *has_hinfo, bool *has_sinfo)
 {
 	struct quic_handshake_info *i = NULL;
 	struct quic_stream_info *s = NULL;
@@ -377,6 +377,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 			s = CMSG_DATA(cmsg);
 			sinfo->stream_id = s->stream_id;
 			sinfo->stream_flag = s->stream_flag;
+			*has_hinfo = true;
 			break;
 		case HYQUIC_INFO:
 			if (!quic_hyquic(sk)->enabled)
@@ -516,13 +517,13 @@ static int quic_sendmsg(struct sock *sk, struct msghdr *msg, size_t msg_len)
 	struct quic_stream_info sinfo = {};
 	struct quic_msginfo msginfo;
 	struct quic_stream *stream;
-	bool has_hinfo = false;
+	bool has_hinfo = false, has_sinfo = false;
 	struct sk_buff *skb;
 	int err = 0;
 	long timeo;
 
 	lock_sock(sk);
-	err = quic_msghdr_parse(sk, msg, &hinfo, &sinfo, &has_hinfo);
+	err = quic_msghdr_parse(sk, msg, &hinfo, &sinfo, &has_hinfo, &has_sinfo);
 	if (err)
 		goto err;
 
@@ -542,6 +543,9 @@ static int quic_sendmsg(struct sock *sk, struct msghdr *msg, size_t msg_len)
 		}
 		goto out;
 	}
+
+	if (!has_sinfo)
+		goto out;
 
 	if (sinfo.stream_flag & QUIC_STREAM_FLAG_DATAGRAM) {
 		if (!quic_outq_max_dgram(quic_outq(sk))) {
