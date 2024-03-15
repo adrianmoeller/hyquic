@@ -66,6 +66,7 @@ namespace hyquic
                 if (extension_reg.contains(frame_details.frame_type))
                     throw extension_config_error("A frame type can only be managed by one extension at a time.");
                 extension_reg.insert({frame_details.frame_type, std::ref(ext)});
+                frame_details_reg.insert({frame_details.frame_type, frame_details});
             }
 
             int err = si::set_transport_parameter(sockfd, ext.transport_parameter(), ext.frame_details_list());
@@ -111,6 +112,7 @@ namespace hyquic
         boost::asio::thread_pool recv_context;
         stream_data_buff recv_buff;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
+        std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
 
         struct {
             hyquic_data_type type;
@@ -168,8 +170,8 @@ namespace hyquic
                     return -EFAULT;
             } else {
                 if (hyquic_data_frag.buff.empty()) {
-                    boost::asio::post(common_context, [this, mvd_data = std::move(data), type = info.type]() {
-                        hyquic::handle_hyquic_data(mvd_data, type);
+                    boost::asio::post(common_context, [this, mvd_data = std::move(data), type = info.type, details = info.details]() {
+                        hyquic::handle_hyquic_data(mvd_data, type, details);
                     });
                 } else {
                     if (hyquic_data_frag.type != info.type)
@@ -178,8 +180,8 @@ namespace hyquic
                         return -EFAULT;
                     if (!hyquic_data_frag.buff_view.end())
                         return -EFAULT;
-                    boost::asio::post(common_context, [this, mvd_data = std::move(hyquic_data_frag.buff), type = info.type]() {
-                        hyquic::handle_hyquic_data(mvd_data, type);
+                    boost::asio::post(common_context, [this, mvd_data = std::move(hyquic_data_frag.buff), type = info.type, details = info.details]() {
+                        hyquic::handle_hyquic_data(mvd_data, type, details);
                     });
                     hyquic_data_frag.clear();
                 }
@@ -197,7 +199,7 @@ namespace hyquic
             });
         }
 
-        void handle_hyquic_data(const buffer &buff, hyquic_data_type data_type)
+        void handle_hyquic_data(const buffer &buff, hyquic_data_type data_type, const hyquic_data_recvinfo_details &details)
         {
             assert(buff.len);
             switch (data_type)
@@ -219,21 +221,39 @@ namespace hyquic
                 buffer_view buff_view(buff);
                 uint64_t frame_type;
                 uint8_t frame_type_len;
-                uint32_t bytes_parsed = 0;
+                hyquic_data_raw_frames_var_send parsing_results = {
+                    .msg_id = details.raw_frames_var.msg_id,
+                    .processed_length = 0,
+                    .ack_eliciting = details.raw_frames_var.ack_eliciting,
+                    .ack_immediate = details.raw_frames_var.ack_immediate,
+                    .non_probing = details.raw_frames_var.non_probing
+                };
 
                 frame_type_len = buff_view.pull_var(frame_type);
                 assert(frame_type_len);
                 while (extension_reg.contains(frame_type)) {
                     extension &ext = extension_reg.at(frame_type);
+                    const hyquic_frame_details &frame_details = frame_details_reg.at(frame_type);
                     uint32_t frame_content_len = ext.handle_frame(frame_type, buff_view);
+
+                    parsing_results.processed_length += frame_type_len + frame_content_len;
+                    if (frame_details.ack_eliciting) {
+                        parsing_results.ack_eliciting = true;
+                        if (frame_details.ack_immediate)
+                            parsing_results.ack_immediate = true;
+                    }
+                    if (frame_details.non_probing)
+                        parsing_results.non_probing = true;
+
                     buff_view.prune(frame_content_len);
-                    bytes_parsed += frame_type_len + frame_content_len;
                     if (buff_view.end())
                         break;
+
                     frame_type_len = buff_view.pull_var(frame_type);
                     assert(frame_type_len);
                 }
-                // TODO notify kernquic of bytes_parsed
+                if (si::send_notify_bytes_parsed(sockfd, parsing_results))
+                    throw network_error("Cannot send notification.");
                 break;
             }
             case HYQUIC_DATA_LOST_FRAMES: {

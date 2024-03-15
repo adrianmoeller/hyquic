@@ -8,7 +8,6 @@
 #include <linux/quic.h>
 #include <linux/hyquic.h>
 #include <sys/socket.h>
-#include "intercom.hpp"
 #include "buffer.hpp"
 
 namespace hyquic
@@ -129,6 +128,39 @@ namespace si
         return err != buff.len;
     }
 
+    int send_notify_bytes_parsed(int sockfd, const hyquic_data_raw_frames_var_send &content)
+    {
+        char outcmsg[CMSG_SPACE(sizeof(hyquic_data_sendinfo))];
+        hyquic_data_sendinfo *info;
+        msghdr msg;
+        cmsghdr *cmsg;
+        iovec iov;
+
+        msg.msg_name = NULL;
+        msg.msg_namelen = 0;
+        msg.msg_iov = &iov;
+        iov.iov_base = nullptr;
+        iov.iov_len = 0;
+        msg.msg_iovlen = 1;
+
+        msg.msg_control = outcmsg;
+        msg.msg_controllen = sizeof(outcmsg);
+        msg.msg_flags = 0;
+
+        cmsg = CMSG_FIRSTHDR(&msg);
+        cmsg->cmsg_level = IPPROTO_QUIC;
+        cmsg->cmsg_type = HYQUIC_INFO;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(*info));
+
+        msg.msg_controllen = cmsg->cmsg_len;
+        info = (hyquic_data_sendinfo*)CMSG_DATA(cmsg);
+        info->type = HYQUIC_DATA_RAW_FRAMES_VAR;
+        info->data_length = 0;
+        info->raw_frames_var = content;
+
+        return sendmsg(sockfd, &msg, 0);
+    }
+
     struct receive_ops {
         std::function<int(buffer&&, const quic_stream_info&)> recv_stream_data;
         std::function<int(buffer&&, const hyquic_data_recvinfo&)> recv_hyquic_data;
@@ -185,7 +217,5 @@ namespace si
     }
 } // namespace si
 } // namespace hyquic
-
-
 
 #endif // __HYQUIC_SOCK_INTERFACE_HPP__
