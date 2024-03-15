@@ -147,16 +147,16 @@ namespace hyquic
 
         inline int recv_stream_data(buffer&& data, const quic_stream_info& info)
         {
-            int err = data.len;
+            int ret = data.len;
             auto stream_data_ptr = std::make_shared<stream_data>(info.stream_id, info.stream_flag, std::move(data));
             if(!recv_buff.push(stream_data_ptr))
-                err = -ENOBUFS;
-            return err;
+                ret = -ENOBUFS;
+            return ret;
         }
 
         inline int recv_hyquic_data(buffer&& data, const hyquic_data_recvinfo& info)
         {
-            int err = data.len;
+            int ret = data.len;
             if (info.incompl) {
                 if (hyquic_data_frag.buff.empty()) {
                     hyquic_data_frag.init(info.type, info.data_length);
@@ -184,7 +184,7 @@ namespace hyquic
                     hyquic_data_frag.clear();
                 }
             }
-            return err;
+            return ret;
         }
 
         void recv_loop()
@@ -199,6 +199,7 @@ namespace hyquic
 
         void handle_hyquic_data(const buffer &buff, hyquic_data_type data_type)
         {
+            assert(buff.len);
             switch (data_type)
             {
             case HYQUIC_DATA_RAW_FRAMES_FIX: {

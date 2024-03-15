@@ -279,7 +279,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **pdata,
     snd_cb->usrquic_frame_seqnum = *pframe_seqnum;
     *pframe_seqnum += 1;
 
-    HQ_PR_DEBUG(sk, "done, type=%llu", frame_type);
+    HQ_PR_DEBUG(sk, "done, type=%llu, len=%u", frame_type, frame_length);
     return skb;
 }
 
@@ -398,6 +398,11 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
     uint8_t level = 0;
     bool found = false;
     int err;
+
+    if (!info->processed_length) {
+        HQ_PR_ERR(sk, "processed length must not be zero");
+        return -EINVAL;
+    }
 
     head = &quic_hyquic(sk)->unkwn_frames_var_deferred;
     skb_queue_walk_safe(head, cursor, tmp) {
@@ -524,7 +529,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         fskb = alloc_skb(remaining_pack_len, GFP_ATOMIC);
         if (!fskb)
             return -ENOMEM;
-        quic_put_data(fskb->data, skb->data, remaining_pack_len);
+        skb_put_data(fskb, skb->data, remaining_pack_len);
 
         rcv_cb = HYQUIC_RCV_CB(fskb);
         rcv_cb->common.path_alt = QUIC_RCV_CB(skb)->path_alt;
@@ -541,7 +546,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         __skb_queue_tail(&sk->sk_receive_queue, fskb);
         sk->sk_data_ready(sk);
         *var_frame_encountered = true;
-        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu", frame_details->frame_type);
+        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu, len=%u", frame_details->frame_type, remaining_pack_len);
     } else {
         frame_len = quic_var_len(frame_details->frame_type) + frame_details->fixed_length;
         if (frame_len > remaining_pack_len) {
@@ -554,7 +559,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         skb_put_data(fskb, skb->data, frame_len);
         __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
         ret = frame_len;
-        HQ_PR_DEBUG(sk, "forwarding frame to user-quic, type=%llu", frame_details->frame_type);
+        HQ_PR_DEBUG(sk, "forwarding frame to user-quic, type=%llu, len=%u", frame_details->frame_type, frame_len);
     }
 
     if (frame_details->ack_eliciting) {
@@ -574,6 +579,10 @@ inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk)
     struct hyquic_data_raw_frames_var_recv *details;
 
     skb = skb_peek_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred);
+    if (!skb) {
+        HQ_PR_ERR(sk, "queue expected not empty");
+        return;
+    }
     details = &HYQUIC_RCV_CB(skb)->hyquic_data_details.raw_frames_var;
     details->ack_timer_started = true;
 }
@@ -584,6 +593,10 @@ inline void hyquic_frame_var_notify_ack_sent(struct sock *sk)
     struct hyquic_data_raw_frames_var_recv *details;
 
     skb = skb_peek_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred);
+    if (!skb) {
+        HQ_PR_ERR(sk, "queue expected not empty");
+        return;
+    }
     details = &HYQUIC_RCV_CB(skb)->hyquic_data_details.raw_frames_var;
     details->ack_sent = true;
 }

@@ -75,6 +75,9 @@ public:
         case 0xb2: {
             uint8_t content_len = frame_content.pull_var(content);
             BCE(content_len, 4);
+            std::lock_guard<std::mutex> lk(mut);
+            first_frame_received = true;
+            frame_cond.notify_all();
             return content_len;
         }
         }
@@ -105,12 +108,17 @@ void test_client(int argc, char *argv[])
     client.connect_to_server();
 
     std::list<buffer> frames_to_send;
-    buffer frame_buff(3);
+    buffer frame_buff(2 + 1);
     buffer_view cursor(frame_buff);
     cursor.push_var(0xb1);
     cursor.push_int<NETWORK>(42, 1);
     frames_to_send.push_back(std::move(frame_buff));
     BAZ(client.send_frames(frames_to_send));
+
+    std::unique_lock<std::mutex> lk(ext.mut);
+    ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.first_frame_received;});
+    BOOST_ASSERT(ext.first_frame_received);
+    lk.unlock();
 
     client.close();
 }
@@ -126,6 +134,14 @@ void test_server(int argc, char *argv[])
     connection.register_extension(ext);
 
     connection.connect_to_client(argv[4], argv[5]);
+
+    std::list<buffer> frames_to_send;
+    buffer frame_buff(2 + 4);
+    buffer_view cursor(frame_buff);
+    cursor.push_var(0xb2);
+    cursor.push_var(39485);
+    frames_to_send.push_back(std::move(frame_buff));
+    BAZ(connection.send_frames(frames_to_send));
 
     std::unique_lock<std::mutex> lk(ext.mut);
     ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.first_frame_received;});

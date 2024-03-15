@@ -97,6 +97,7 @@ namespace si
         msghdr msg;
         cmsghdr *cmsg;
         iovec iov;
+        int err;
 
         msg.msg_name = NULL;
         msg.msg_namelen = 0;
@@ -122,7 +123,10 @@ namespace si
             .first_frame_seqnum = 0 // TODO needed?
         };
 
-        return sendmsg(sockfd, &msg, 0) != buff.len;
+        err = sendmsg(sockfd, &msg, 0);
+        if (err < 0)
+            return err;
+        return err != buff.len;
     }
 
     struct receive_ops {
