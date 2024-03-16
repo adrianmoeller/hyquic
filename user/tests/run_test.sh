@@ -3,6 +3,7 @@
 YELLOW='\033[1;33m'
 NC='\033[0m'
 EXIT_CODE=0
+THIS_DIR=$(dirname "$0")
 
 while getopts "s:c:" opt; do
     case ${opt} in
@@ -24,7 +25,7 @@ done
 shift $(($OPTIND - 1))
 [ "$@" != "" ] || exit 1
 
-APP_EXEC="./$@"
+APP_EXEC="${THIS_DIR}/../build/$@"
 
 rm -f test.tmp
 timeout -k 20s 20s ${APP_EXEC} -- server ${SERVER_ARGS} &> test.tmp &
