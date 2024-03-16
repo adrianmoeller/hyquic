@@ -4,7 +4,11 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <boost/lockfree/spsc_queue.hpp>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <optional>
 #include <boost/endian/conversion.hpp>
 
 namespace hyquic
@@ -33,7 +37,7 @@ namespace hyquic
         buffer& operator=(buffer&) = delete;
 
         buffer(buffer &&other)
-            :data(other.data), len(other.len)
+            : data(other.data), len(other.len)
         {
             other.data = nullptr;
             other.len = 0;
@@ -268,19 +272,54 @@ namespace hyquic
         };
     };
 
-    struct stream_data
+    template<class T>
+    class wait_queue
     {
-        uint64_t id;
-        uint32_t flag;
-        buffer buff;
-
-        stream_data(uint64_t id, uint32_t flag, buffer &&buff)
-            : id(id), flag(flag), buff(std::move(buff))
+    public:
+        wait_queue()
         {
         }
-    };
 
-    typedef boost::lockfree::spsc_queue<std::shared_ptr<stream_data>> stream_data_buff;
+        inline void push(T &&value)
+        {
+            std::lock_guard<std::mutex> lock(mut);
+            internal_queue.push(std::move(value));
+            cv.notify_all();
+        }
+
+        inline T wait_pop()
+        {
+            std::unique_lock<std::mutex> lock(mut);
+            cv.wait(lock, [this]{
+                return !this->internal_queue.empty();
+            });
+            T value = std::move(internal_queue.front());
+            internal_queue.pop();
+            lock.unlock();
+            return std::move(value);
+        }
+
+        template<class Rep, class Period>
+        inline std::optional<T> wait_pop(const std::chrono::duration<Rep, Period> &timeout)
+        {
+            std::unique_lock<std::mutex> lock(mut);
+            bool not_empty = cv.wait_for(lock, timeout, [this]{
+                return !this->internal_queue.empty();
+            });
+            std::optional<T> value;
+            if (not_empty) {
+                value = std::optional<T>(std::move(internal_queue.front()));
+                internal_queue.pop();
+            }
+            lock.unlock();
+            return std::move(value);
+        }
+
+    private:
+        std::mutex mut;
+        std::condition_variable cv;
+        std::queue<T> internal_queue;
+    };
 } // namespace hyquic
 
 

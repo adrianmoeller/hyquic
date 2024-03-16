@@ -23,6 +23,34 @@ extern "C" {
 
 namespace hyquic
 {
+    struct stream_data
+    {
+        uint64_t id;
+        uint32_t flags;
+        buffer buff;
+
+        stream_data(uint64_t id, uint32_t flags, buffer &&buff)
+            : id(id), flags(flags), buff(std::move(buff))
+        {
+        }
+
+        stream_data(const stream_data&) = delete;
+        stream_data& operator=(stream_data&) = delete;
+
+        stream_data(stream_data &&other)
+            : id(other.id), flags(other.flags), buff(std::move(other.buff))
+        {
+        }
+
+        stream_data& operator=(stream_data &&other)
+        {
+            std::swap(id, other.id);
+            std::swap(flags, other.flags);
+            std::swap(buff, other.buff);
+            return *this;
+        }
+    };
+
     class extension
     {
     protected:
@@ -44,14 +72,13 @@ namespace hyquic
         friend class hyquic;
     };
 
-#define RECV_STREAM_BUFF_INIT_SIZE  2048
-#define RECV_BUFF_INIT_SIZE         65507
+#define RECV_BUFF_INIT_SIZE 65507
 
     class hyquic
     {
     public:
         hyquic()
-            : running(false), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
+            : running(false), recv_context(1), common_context(1)
         {
         }
 
@@ -107,18 +134,20 @@ namespace hyquic
             return si::send_frames(sockfd, frames);
         }
 
-        int send_msg()
+        inline int send_msg(const stream_data& msg)
         {
-            // TODO
-
-            return 0;
+            return quic_sendmsg(sockfd, msg.buff.data, msg.buff.len, msg.id, msg.flags);
         }
 
-        int receive_msg()
+        inline stream_data receive_msg()
         {
-            // TODO
+            return recv_buff.wait_pop();
+        }
 
-            return 0;
+        template<class Rep, class Period>
+        inline std::optional<stream_data> receive_msg(const std::chrono::duration<Rep, Period> &timeout)
+        {
+            return recv_buff.wait_pop(timeout);
         }
 
         inline int close()
@@ -143,7 +172,7 @@ namespace hyquic
     private:
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
-        stream_data_buff recv_buff;
+        wait_queue<stream_data> recv_buff;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
         std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
@@ -239,9 +268,7 @@ namespace hyquic
         inline int recv_stream_data(buffer&& data, const quic_stream_info& info)
         {
             int ret = data.len;
-            auto stream_data_ptr = std::make_shared<stream_data>(info.stream_id, info.stream_flag, std::move(data));
-            if(!recv_buff.push(stream_data_ptr))
-                ret = -ENOBUFS;
+            recv_buff.push(stream_data(info.stream_id, info.stream_flag, std::move(data)));
             return ret;
         }
 
