@@ -51,15 +51,12 @@ namespace hyquic
     {
     public:
         hyquic()
-            : running(false), closed(false), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
+            : running(false), recv_buff(RECV_STREAM_BUFF_INIT_SIZE), recv_context(1), common_context(1)
         {
         }
 
         ~hyquic()
         {
-            si::socket_close(sockfd);
-            closed.store(true);
-
             recv_context.stop();
             common_context.stop();
             recv_context.join();
@@ -131,12 +128,12 @@ namespace hyquic
 
     protected:
         bool running;
-        std::atomic<bool> closed;
         int sockfd;
 
         void run()
         {
             running = true;
+            set_receive_timeout();
             collect_remote_transport_parameter();
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
@@ -150,6 +147,17 @@ namespace hyquic
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
         std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
+
+        void set_receive_timeout()
+        {
+            timeval tv = {
+                .tv_sec = 2,
+                .tv_usec = 0
+            };
+            int err = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const void*) &tv, sizeof(tv));
+            if (err)
+                throw network_error("Socket set receive timeout failed.", err);
+        }
 
         void collect_remote_transport_parameter()
         {
@@ -273,8 +281,10 @@ namespace hyquic
         void recv_loop()
         {
             int err = si::receive(sockfd, recv_ops, RECV_BUFF_INIT_SIZE);
-            if (err <= 0)
-                return;
+            if (err < 0) {
+                if (err != -EAGAIN && err != -EWOULDBLOCK)
+                    return;
+            }
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
             });
