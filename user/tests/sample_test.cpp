@@ -17,14 +17,14 @@ using namespace hyquic;
 #define BCE(L,R) BOOST_CHECK_EQUAL(L,R)
 #define BAZ(expr) BOOST_CHECK_EQUAL(expr,0)
 
-class simple_extension : public extension
+class sample_extension : public extension
 {
 public:
     std::mutex mut;
     std::condition_variable frame_cond;
     bool first_frame_received;
 
-    simple_extension(hyquic::hyquic &container)
+    sample_extension(hyquic::hyquic &container)
         : container(container), first_frame_received(false)
     {
         frame_details.push_back((hyquic_frame_details) {
@@ -91,6 +91,11 @@ public:
         BAZ(container.send_frames(frames_to_resend));
     }
 
+    bool is_remote_transport_parameter_available()
+    {
+        return remote_transport_param_available;
+    }
+
 private:
     hyquic::hyquic &container;
     std::vector<hyquic_frame_details> frame_details;
@@ -102,10 +107,11 @@ void test_client(int argc, char *argv[])
 
     hyquic_client client(argv[2], atoi(argv[3]));
 
-    simple_extension ext(client);
+    sample_extension ext(client);
     client.register_extension(ext);
 
     client.connect_to_server();
+    BOOST_ASSERT(ext.is_remote_transport_parameter_available());
 
     std::list<buffer> frames_to_send;
     buffer frame_buff(2 + 1);
@@ -130,10 +136,11 @@ void test_server(int argc, char *argv[])
     hyquic_server server(argv[2], atoi(argv[3]));
     hyquic_server_connection connection = server.accept_connection();
 
-    simple_extension ext(connection);
+    sample_extension ext(connection);
     connection.register_extension(ext);
 
     connection.connect_to_client(argv[4], argv[5]);
+    BOOST_ASSERT(ext.is_remote_transport_parameter_available());
 
     std::list<buffer> frames_to_send;
     buffer frame_buff(2 + 4);

@@ -26,7 +26,8 @@ namespace hyquic
     class extension
     {
     protected:
-        buffer remote_param_content;
+        bool remote_transport_param_available = false;
+        buffer remote_transport_param_content;
 
         virtual inline buffer transport_parameter() = 0;
         virtual const std::vector<hyquic_frame_details>& frame_details_list() = 0;
@@ -36,7 +37,8 @@ namespace hyquic
     private:
         void set_remote_transport_parameter(buffer &&content)
         {
-            remote_param_content = std::move(content);
+            remote_transport_param_available = true;
+            remote_transport_param_content = std::move(content);
         }
 
         friend class hyquic;
@@ -135,10 +137,19 @@ namespace hyquic
         void run()
         {
             running = true;
+            collect_remote_transport_parameter();
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
             });
         }
+
+    private:
+        boost::asio::thread_pool common_context;
+        boost::asio::thread_pool recv_context;
+        stream_data_buff recv_buff;
+        std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
+        std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
+        std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
 
         void collect_remote_transport_parameter()
         {
@@ -149,6 +160,9 @@ namespace hyquic
             err = si::socket_getsockopt(sockfd, HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN, &total_transport_params_length, &len);
             if (err)
                 throw network_error("Getting remote transport parameters length failed.", err);
+
+            if (!total_transport_params_length)
+                return;
 
             buffer transport_parameters(total_transport_params_length);
             err = si::socket_getsockopt(sockfd, HYQUIC_SOCKOPT_TRANSPORT_PARAM, transport_parameters.data, &total_transport_params_length);
@@ -164,30 +178,22 @@ namespace hyquic
 
                 uint64_t tp_id;
                 var_length = cursor.pull_var(tp_id);
-                assert(!var_length);
+                assert(var_length);
                 tp_length += var_length;
-
-                if (!tp_id_to_extension.contains(tp_id))
-                    continue;
 
                 uint64_t tp_content_length;
                 var_length = cursor.pull_var(tp_content_length);
-                assert(!var_length);
+                assert(var_length);
                 tp_length += var_length + tp_content_length;
                 cursor.prune(tp_content_length);
+
+                if (!tp_id_to_extension.contains(tp_id))
+                    continue;
 
                 extension &ext = tp_id_to_extension.at(tp_id);
                 ext.set_remote_transport_parameter(tp_beginning.copy(tp_length));
             }
         }
-
-    private:
-        boost::asio::thread_pool common_context;
-        boost::asio::thread_pool recv_context;
-        stream_data_buff recv_buff;
-        std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
-        std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
-        std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
 
         struct {
             hyquic_data_type type;
