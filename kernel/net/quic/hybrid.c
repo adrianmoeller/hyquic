@@ -132,6 +132,37 @@ static inline struct hyquic_transport_param* hyquic_transport_param_create(uint6
     return param;
 }
 
+static int hyquic_frame_details_create(struct hyquic_adapter *hyquic, struct hyquic_frame_details *frame_details)
+{
+    struct quic_hash_head *head;
+    struct hyquic_frame_details_entry *entry;
+
+    entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
+    if (!entry)
+        return -ENOMEM;
+    
+    memcpy(&entry->details, frame_details, sizeof(struct hyquic_frame_details));
+
+    head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_details->frame_type);
+    hlist_add_head(&entry->node, &head->head);
+
+    HQ_PR_DEBUG(hyquic->sk, "done, type=%llu", frame_details->frame_type);
+    return 0;
+}
+
+struct hyquic_frame_details* hyquic_frame_details_get(struct hyquic_adapter *hyquic, uint64_t frame_type)
+{
+    struct quic_hash_head *head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_type);
+    struct hyquic_frame_details_entry *cursor;
+
+    hlist_for_each_entry(cursor, &head->head, node) {
+        if (cursor->details.frame_type == frame_type)
+            return &cursor->details;
+    }
+
+    return NULL;
+}
+
 int hyquic_set_local_transport_parameter(struct hyquic_adapter *hyquic, void *data, uint32_t length)
 {
     struct hyquic_transport_param *entry;
@@ -485,37 +516,6 @@ int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, stru
 out:
     kfree(data);
     return err;
-}
-
-int hyquic_frame_details_create(struct hyquic_adapter *hyquic, struct hyquic_frame_details *frame_details)
-{
-    struct quic_hash_head *head;
-    struct hyquic_frame_details_entry *entry;
-
-    entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
-    if (!entry)
-        return -ENOMEM;
-    
-    memcpy(&entry->details, frame_details, sizeof(struct hyquic_frame_details));
-
-    head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_details->frame_type);
-    hlist_add_head(&entry->node, &head->head);
-
-    HQ_PR_DEBUG(hyquic->sk, "done, type=%llu", frame_details->frame_type);
-    return 0;
-}
-
-struct hyquic_frame_details* hyquic_frame_details_get(struct hyquic_adapter *hyquic, uint64_t frame_type)
-{
-    struct quic_hash_head *head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_type);
-    struct hyquic_frame_details_entry *cursor;
-
-    hlist_for_each_entry(cursor, &head->head, node) {
-        if (cursor->details.frame_type == frame_type)
-            return &cursor->details;
-    }
-
-    return NULL;
 }
 
 int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details *frame_details, bool *var_frame_encountered)
