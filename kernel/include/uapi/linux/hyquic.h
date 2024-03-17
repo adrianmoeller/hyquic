@@ -68,4 +68,10 @@ struct hyquic_frame_details {
 	uint8_t non_probing:1;
 };
 
+enum hyquic_frame_format_spec_component_type {
+    HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT,
+    HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN,
+    HYQUIC_FRAME_FORMAT_SPEC_COMP_DECL_LEN
+};
+
 #endif /* __uapi_hyquic_h__ */

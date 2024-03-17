@@ -11,6 +11,8 @@
 #define HQ_PR_ERR(__sk, __msg, ...) printk(KERN_ERR pr_fmt("[HyQUIC] %s@%s: "__msg"\n"), quic_is_serv(__sk)?"server":"client", __func__, ##__VA_ARGS__)
 #define HQ_PR_DEBUG(__sk, __msg, ...) pr_debug(_HQ_MSG(__sk, __msg), ##__VA_ARGS__)
 
+#include "hybrid_frame_format_spec.h"
+
 struct hyquic_frame_details_entry {
     struct hlist_node node;
     struct hyquic_frame_details_cont cont;
@@ -304,19 +306,6 @@ int hyquic_transfer_local_transport_parameters(struct hyquic_adapter *hyquic, ui
     }
 
     return 0;
-}
-
-static int hyquic_parse_frame_content(const uint8_t *frame_content, const uint8_t *format_specification, uint16_t spec_length, uint32_t *parsed_length)
-{
-    int err = 0;
-    uint8_t *spec_cursor = format_specification;
-    uint8_t *content_cursor = frame_content;
-    uint32_t parsed_len = 0;
-
-    // TODO
-
-    *parsed_length = parsed_len;
-    return err;
 }
 
 static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **pdata, uint32_t *pdata_length, uint64_t *pframe_seqnum)
