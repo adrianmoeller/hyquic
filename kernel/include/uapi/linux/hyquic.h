@@ -62,7 +62,7 @@ struct hyquic_data_recvinfo {
 
 struct hyquic_frame_details {
 	uint64_t frame_type;
-	int32_t fixed_length;
+	uint16_t format_specification_avail;
 	uint8_t ack_eliciting:1;
 	uint8_t ack_immediate:1;
 	uint8_t non_probing:1;

@@ -29,6 +29,11 @@ struct hyquic_adapter {
     struct quic_hash_table frame_details_table;
 };
 
+struct hyquic_frame_details_cont {
+    struct hyquic_frame_details details;
+    uint8_t *format_specification;
+};
+
 #define hyquic_transport_param_for_each(pos, head) list_for_each_entry((pos), (head), list)
 
 struct hyquic_snd_cb {
@@ -49,22 +54,18 @@ struct hyquic_rcv_cb {
 inline void hyquic_enable(struct sock *sk);
 int hyquic_init(struct hyquic_adapter *hyquic, struct sock *sk);
 void hyquic_free(struct hyquic_adapter *hyquic);
-struct hyquic_frame_details* hyquic_frame_details_get(struct hyquic_adapter *hyquic, uint64_t frame_type);
+struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_adapter *hyquic, uint64_t frame_type);
+inline bool hyquic_is_usrquic_frame(struct hyquic_adapter *hyquic, uint64_t frame_type);
 int hyquic_set_local_transport_parameter(struct hyquic_adapter *hyquic, void *data, uint32_t length);
 int hyquic_get_remote_transport_parameters(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen);
 int hyquic_get_remote_transport_parameters_length(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen);
 int hyquic_handle_remote_transport_parameter(struct hyquic_adapter *hyquic, uint64_t type, uint8_t **pp, uint32_t *plen);
 int hyquic_transfer_local_transport_parameters(struct hyquic_adapter *hyquic, uint8_t **pp, uint8_t *data);
 int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_data_sendinfo *info);
-int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details *frame_details, bool *var_frame_encountered);
+int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered);
 inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk);
 inline void hyquic_frame_var_notify_ack_sent(struct sock *sk);
 int hyquic_flush_unkwn_frames_inqueue(struct sock *sk);
 int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb);
-
-static inline bool hyquic_is_usrquic_frame(struct hyquic_adapter *hyquic, uint64_t frame_type)
-{
-    return hyquic_frame_details_get(hyquic, frame_type);
-}
 
 #endif /* __QUIC_HYBRID_H__ */

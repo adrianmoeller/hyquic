@@ -282,7 +282,7 @@ namespace hyquic
                     if (hyquic_data_frag.type != info.type)
                         return -EFAULT;
                 }
-                if (!hyquic_data_frag.buff_view.push_buff(std::move(data)))
+                if (!hyquic_data_frag.buff_view.push_buff_into(std::move(data)))
                     return -EFAULT;
             } else {
                 if (hyquic_data_frag.buff.empty()) {
@@ -292,7 +292,7 @@ namespace hyquic
                 } else {
                     if (hyquic_data_frag.type != info.type)
                         return -EFAULT;
-                    if (!hyquic_data_frag.buff_view.push_buff(std::move(data)))
+                    if (!hyquic_data_frag.buff_view.push_buff_into(std::move(data)))
                         return -EFAULT;
                     if (!hyquic_data_frag.buff_view.end())
                         return -EFAULT;

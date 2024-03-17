@@ -9,6 +9,7 @@
 #include <linux/hyquic.h>
 #include <sys/socket.h>
 #include "buffer.hpp"
+#include "frame_format_spec.hpp"
 
 namespace hyquic
 {
@@ -54,17 +55,47 @@ namespace si
         return close(sockfd);
     }
 
-    int set_transport_parameter(int sockfd, buffer &&param, const std::vector<hyquic_frame_details> &frame_details_list)
+    struct frame_details_container
+    {
+        const hyquic_frame_details frame_details;
+        const frame_format_specification format_specification;
+
+        frame_details_container(
+            uint64_t frame_type,
+            bool ack_eliciting,
+            bool ack_immediate,
+            bool non_probing,
+            frame_format_specification &&format_specification
+        )
+            : frame_details{
+                .frame_type = frame_type,
+                .format_specification_avail = format_specification.available(),
+                .ack_eliciting = ack_eliciting,
+                .ack_immediate = ack_immediate,
+                .non_probing = non_probing
+            },
+            format_specification(format_specification)
+        {
+        }
+    };
+
+    int set_transport_parameter(int sockfd, buffer &&param, const std::vector<frame_details_container> &frame_details_list)
     {
         size_t num_frame_details = frame_details_list.size();
-        size_t frame_details_length = num_frame_details * sizeof(hyquic_frame_details);
+        size_t format_specifications_length = 0;
+        for (const frame_details_container &frame_details_cont : frame_details_list)
+            format_specifications_length += frame_details_cont.format_specification.sizeof_encoded();
+        size_t frame_details_length = num_frame_details * sizeof(hyquic_frame_details) + format_specifications_length;
+
         buffer buff(sizeof(size_t) + frame_details_length + param.len);
         buffer_view cursor(buff);
 
         cursor.push(num_frame_details);
-        for (const hyquic_frame_details &frame_details : frame_details_list)
-            cursor.push(frame_details);
-        cursor.push_buff(std::move(param));
+        for (const frame_details_container &frame_details_cont : frame_details_list) {
+            cursor.push(frame_details_cont.frame_details);
+            cursor.push_buff(frame_details_cont.format_specification.get_encoded());
+        }
+        cursor.push_buff_into(std::move(param));
 
         return socket_setsockopt(sockfd, HYQUIC_SOCKOPT_TRANSPORT_PARAM, buff.data, buff.len);
     }
@@ -82,7 +113,7 @@ namespace si
             buffer frame_buff = std::move(frames.front());
             frames.pop_front();
             cursor.push_int<NATIVE>(frame_buff.len, 4);
-            cursor.push_buff(std::move(frame_buff));
+            cursor.push_buff_into(std::move(frame_buff));
         }
 
         return buff;

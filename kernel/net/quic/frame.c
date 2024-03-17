@@ -1295,7 +1295,7 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_
 	int64_t len = pki->length;
 	uint64_t type;
 	uint8_t type_len;
-	struct hyquic_frame_details *frame_details;
+	struct hyquic_frame_details_cont *frame_details_cont;
 
 	if (!len)
 		return -EINVAL;
@@ -1304,9 +1304,9 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_
 		type_len = quic_peek_var(skb->data, &type);
 
 		if (quic_hyquic(sk)->enabled) {
-			frame_details = hyquic_frame_details_get(quic_hyquic(sk), type);
-			if (frame_details) {
-				ret = hyquic_process_unkwn_frame(sk, skb, pki, len, frame_details, var_frame_encountered);
+			frame_details_cont = hyquic_frame_details_get(quic_hyquic(sk), type);
+			if (frame_details_cont) {
+				ret = hyquic_process_unkwn_frame(sk, skb, pki, len, frame_details_cont, var_frame_encountered);
 				if (ret < 0)
 					return ret;
 				if (var_frame_encountered)

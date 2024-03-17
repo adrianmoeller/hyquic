@@ -206,7 +206,12 @@ namespace hyquic
             return push((uint8_t*) &data, sizeof(T));
         }
 
-        inline bool push_buff(buffer &&buff)
+        inline bool push_buff_into(buffer &&buff)
+        {
+            return push(buff.data, buff.len);
+        }
+
+        inline bool push_buff(buffer &buff)
         {
             return push(buff.data, buff.len);
         }
