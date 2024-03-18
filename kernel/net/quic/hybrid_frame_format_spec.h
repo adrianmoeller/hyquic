@@ -74,9 +74,45 @@ static inline int hyquic_parse_fix_len_component(struct hyquic_frame_format_spec
     return 0;
 }
 
-static inline int hyquic_parse_declared_len_component(struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+static inline int hyquic_parse_multi_const_declared_len_component(struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
 {
     uint64_t declared_length;
+    uint8_t constant;
+    uint64_t product;
+
+    if (!ref_id)
+        return -EINVAL;
+
+    declared_length = cont->ref_id_index[ref_id];
+
+    cont->spec_cursor++;
+    cont->spec_length--;
+
+    constant = quic_get_int(&cont->spec_cursor, 1);
+    cont->spec_length--;
+
+    if (!constant)
+        return -EINVAL;
+
+    if (!declared_length)
+        return 0;
+
+    product = declared_length * constant;
+
+    cont->content_cursor += product;
+    cont->content_length -= product;
+
+    return 0;
+}
+
+static int hyquic_parse_next_spec_component(struct hyquic_frame_format_spec_cont *cont);
+
+static inline int hyquic_parse_multi_scope_declared_len_component(struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+{
+    int err, i;
+    uint64_t declared_length;
+    uint8_t scope_length;
+    struct hyquic_frame_format_spec_cont scope_cont;
 
     if (!ref_id)
         return -EINVAL;
@@ -88,12 +124,47 @@ static inline int hyquic_parse_declared_len_component(struct hyquic_frame_format
     cont->spec_cursor++;
     cont->spec_length--;
 
-    // TODO
+    scope_length = quic_get_int(&cont->spec_cursor, 1);
+    cont->spec_length--;
+
+    if (!scope_length)
+        return -EINVAL;
+    
+    if (!declared_length) {
+        cont->spec_cursor += scope_length;
+        cont->spec_length -= scope_length;
+        return 0;
+    }
+
+
+    for (i = 0; i < declared_length; i++) {
+        scope_cont = (struct hyquic_frame_format_spec_cont) {
+            .spec_length = scope_length,
+            .spec_cursor = cont->spec_cursor,
+            .content_length = cont->content_length,
+            .content_cursor = cont->content_cursor,
+            .parsed_len = cont->parsed_len
+        };
+        memcpy(scope_cont.ref_id_index, cont->ref_id_index, sizeof(cont->ref_id_index));
+
+        while (scope_cont.spec_length > 0) {
+            err = hyquic_parse_next_spec_component(&scope_cont);
+            if (err)
+                return err;
+        }
+
+        cont->content_cursor = scope_cont.content_cursor;
+        cont->content_length = scope_cont.content_length;
+        cont->parsed_len = scope_cont.parsed_len;
+    }
+
+    cont->spec_cursor += scope_length;
+    cont->spec_length -= scope_length;
 
     return 0;
 }
 
-static inline int hyquic_parse_next_spec_component(struct hyquic_frame_format_spec_cont *cont)
+static int hyquic_parse_next_spec_component(struct hyquic_frame_format_spec_cont *cont)
 {
     uint8_t comp_header = *cont->spec_cursor;
     uint8_t comp_type = comp_header >> 6;
@@ -104,8 +175,10 @@ static inline int hyquic_parse_next_spec_component(struct hyquic_frame_format_sp
         return hyquic_parse_var_int_component(cont, comp_ref_id);
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN:
         return hyquic_parse_fix_len_component(cont, comp_ref_id);
-    case HYQUIC_FRAME_FORMAT_SPEC_COMP_DECL_LEN:
-        return hyquic_parse_declared_len_component(cont, comp_ref_id);
+    case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULTI_CONST_DECL_LEN:
+        return hyquic_parse_multi_const_declared_len_component(cont, comp_ref_id);
+    case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULTI_SCOPE_DECL_LEN:
+        return hyquic_parse_multi_scope_declared_len_component(cont, comp_ref_id);
     default:
         return -EINVAL;
     }
