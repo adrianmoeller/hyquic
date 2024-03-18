@@ -190,7 +190,7 @@ namespace hyquic
             return val;
         }
 
-        inline bool push(uint8_t *data, uint32_t len)
+        inline bool push(const uint8_t *data, uint32_t len)
         {
             if (len > this->len)
                 return false;
@@ -211,7 +211,7 @@ namespace hyquic
             return push(buff.data, buff.len);
         }
 
-        inline bool push_buff(buffer &buff)
+        inline bool push_buff(const buffer &buff)
         {
             return push(buff.data, buff.len);
         }

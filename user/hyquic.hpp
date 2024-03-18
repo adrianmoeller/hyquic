@@ -58,7 +58,7 @@ namespace hyquic
         buffer remote_transport_param_content;
 
         virtual inline buffer transport_parameter() = 0;
-        virtual const std::vector<hyquic_frame_details>& frame_details_list() = 0;
+        virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
     
@@ -98,11 +98,11 @@ namespace hyquic
             if (running)
                 throw extension_config_error("Extensions must be registered before running HyQUIC.");
 
-            for (auto const &frame_details : ext.frame_details_list()) {
-                if (extension_reg.contains(frame_details.frame_type))
+            for (auto const &frame_details_cont : ext.frame_details_list()) {
+                if (extension_reg.contains(frame_details_cont.frame_details.frame_type))
                     throw extension_config_error("A frame type can only be managed by one extension at a time.");
-                extension_reg.insert({frame_details.frame_type, std::ref(ext)});
-                frame_details_reg.insert({frame_details.frame_type, frame_details});
+                extension_reg.insert({frame_details_cont.frame_details.frame_type, std::ref(ext)});
+                frame_details_reg.insert({frame_details_cont.frame_details.frame_type, frame_details_cont.frame_details});
             }
 
             buffer transport_param = ext.transport_parameter();

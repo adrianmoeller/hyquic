@@ -27,20 +27,20 @@ public:
     sample_extension(hyquic::hyquic &container)
         : container(container), first_frame_received(false)
     {
-        frame_details.push_back((hyquic_frame_details) {
-            .frame_type = 0xb1,
-            .fixed_length = 1,
-            .ack_eliciting = true,
-            .ack_immediate = false,
-            .non_probing = true,
-        });
-        frame_details.push_back((hyquic_frame_details) {
-            .frame_type = 0xb2,
-            .fixed_length = -1,
-            .ack_eliciting = true,
-            .ack_immediate = true,
-            .non_probing = true,
-        });
+        frame_details.push_back(si::frame_details_container(
+            0xb1,
+            true,
+            false,
+            true,
+            fixed_length_frame_format_specification(1)
+        ));
+        frame_details.push_back(si::frame_details_container(
+            0xb2,
+            true,
+            true,
+            true,
+            no_frame_format_specification()
+        ));
     }
 
     inline buffer transport_parameter()
@@ -54,7 +54,7 @@ public:
         return buff;
     }
 
-    const std::vector<hyquic_frame_details>& frame_details_list()
+    const std::vector<si::frame_details_container>& frame_details_list()
     {
         return frame_details;
     }
@@ -98,7 +98,7 @@ public:
 
 private:
     hyquic::hyquic &container;
-    std::vector<hyquic_frame_details> frame_details;
+    std::vector<si::frame_details_container> frame_details;
 };
 
 void test_client(int argc, char *argv[])

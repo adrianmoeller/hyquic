@@ -41,6 +41,11 @@ namespace hyquic
     {
         using error::error;
     };
+
+    class frame_format_spec_error : public error
+    {
+        using error::error;
+    };
 } // namespace hyquic
 
 

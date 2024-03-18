@@ -57,25 +57,41 @@ namespace si
 
     struct frame_details_container
     {
-        const hyquic_frame_details frame_details;
-        const frame_format_specification format_specification;
+        hyquic_frame_details frame_details;
+        buffer format_specification;
 
         frame_details_container(
             uint64_t frame_type,
             bool ack_eliciting,
             bool ack_immediate,
             bool non_probing,
-            frame_format_specification &&format_specification
+            buffer &&format_specification
         )
             : frame_details{
                 .frame_type = frame_type,
-                .format_specification_avail = format_specification.available(),
+                .format_specification_avail = (uint16_t) format_specification.len,
                 .ack_eliciting = ack_eliciting,
                 .ack_immediate = ack_immediate,
                 .non_probing = non_probing
             },
-            format_specification(format_specification)
+            format_specification(std::move(format_specification))
         {
+        }
+
+        frame_details_container(const frame_details_container&) = delete;
+        frame_details_container& operator=(frame_details_container&) = delete;
+
+        frame_details_container(frame_details_container &&other)
+            : frame_details(other.frame_details), format_specification(std::move(other.format_specification))
+        {
+            other.frame_details = {0};
+        }
+
+        frame_details_container& operator=(frame_details_container &&other)
+        {
+            std::swap(frame_details, other.frame_details);
+            std::swap(format_specification, other.format_specification);
+            return *this;
         }
     };
 
@@ -84,7 +100,7 @@ namespace si
         size_t num_frame_details = frame_details_list.size();
         size_t format_specifications_length = 0;
         for (const frame_details_container &frame_details_cont : frame_details_list)
-            format_specifications_length += frame_details_cont.format_specification.sizeof_encoded();
+            format_specifications_length += frame_details_cont.format_specification.len;
         size_t frame_details_length = num_frame_details * sizeof(hyquic_frame_details) + format_specifications_length;
 
         buffer buff(sizeof(size_t) + frame_details_length + param.len);
@@ -93,7 +109,7 @@ namespace si
         cursor.push(num_frame_details);
         for (const frame_details_container &frame_details_cont : frame_details_list) {
             cursor.push(frame_details_cont.frame_details);
-            cursor.push_buff(frame_details_cont.format_specification.get_encoded());
+            cursor.push_buff(frame_details_cont.format_specification);
         }
         cursor.push_buff_into(std::move(param));
 

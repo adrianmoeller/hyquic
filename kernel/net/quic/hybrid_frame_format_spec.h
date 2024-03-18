@@ -74,7 +74,7 @@ static inline int hyquic_parse_fix_len_component(struct hyquic_frame_format_spec
     return 0;
 }
 
-static inline int hyquic_parse_multi_const_declared_len_component(struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+static inline int hyquic_parse_mult_const_declared_len_component(struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
 {
     uint64_t declared_length;
     uint8_t constant;
@@ -107,7 +107,7 @@ static inline int hyquic_parse_multi_const_declared_len_component(struct hyquic_
 
 static int hyquic_parse_next_spec_component(struct hyquic_frame_format_spec_cont *cont);
 
-static inline int hyquic_parse_multi_scope_declared_len_component(struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+static inline int hyquic_parse_mult_scope_declared_len_component(struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
 {
     int err, i;
     uint64_t declared_length;
@@ -175,10 +175,10 @@ static int hyquic_parse_next_spec_component(struct hyquic_frame_format_spec_cont
         return hyquic_parse_var_int_component(cont, comp_ref_id);
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN:
         return hyquic_parse_fix_len_component(cont, comp_ref_id);
-    case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULTI_CONST_DECL_LEN:
-        return hyquic_parse_multi_const_declared_len_component(cont, comp_ref_id);
-    case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULTI_SCOPE_DECL_LEN:
-        return hyquic_parse_multi_scope_declared_len_component(cont, comp_ref_id);
+    case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN:
+        return hyquic_parse_mult_const_declared_len_component(cont, comp_ref_id);
+    case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_SCOPE_DECL_LEN:
+        return hyquic_parse_mult_scope_declared_len_component(cont, comp_ref_id);
     default:
         return -EINVAL;
     }
