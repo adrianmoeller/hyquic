@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <memory>
 #include "buffer.hpp"
 #include "errors.hpp"
 
@@ -12,13 +13,37 @@
 
 namespace hyquic
 {
+    static inline uint8_t get_var_int_length(uint64_t val)
+    {
+        if (val < 64)
+            return 1;
+        if (val < 16384)
+            return 2;
+        if (val < 1073741824)
+            return 4;
+        return 8;
+    }
+
     class frame_format_specification_builder
     {
     public:
+        size_t size() const
+        {
+            size_t size = 0;
+            for (const auto &comp : components)
+                size += comp->size();
+            return size;
+        }
+
         buffer get_specification() const
         {
-            // TODO
-            return buffer();
+            buffer buff(size());
+            buffer_view cursor(buff);
+
+            for (const auto &comp : components)
+                comp->encode(cursor);
+
+            return buff;
         }
 
         uint8_t add_var_int_component(bool declares_length = false)
@@ -27,7 +52,7 @@ namespace hyquic
             if (declares_length) {
                 ref_id = ref_id_counter++;
             }
-            components.push_back(var_int_component(ref_id));
+            components.push_back(std::make_unique<var_int_component>(ref_id));
             return ref_id;
         }
 
@@ -37,18 +62,18 @@ namespace hyquic
             if (declares_length) {
                 ref_id = ref_id_counter++;
             }
-            components.push_back(fix_len_component(length, ref_id));
+            components.push_back(std::make_unique<fix_len_component>(length, ref_id));
             return ref_id;
         }
 
-        void add_mult_const_decl_len_component(uint8_t declared_length)
+        void add_mult_const_decl_len_component(uint8_t declared_length_ref_id, uint8_t constant)
         {
-            // TODO
+            components.push_back(std::make_unique<mult_const_decl_len_component>(constant, declared_length_ref_id));
         }
 
-        void add_mult_scope_decl_len_component(uint8_t declared_length)
+        void add_mult_scope_decl_len_component(uint8_t declared_length_ref_id, frame_format_specification_builder &scope)
         {
-            // TODO
+            components.push_back(std::make_unique<mult_scope_decl_len_component>(scope, declared_length_ref_id));
         }
 
     private:
@@ -63,8 +88,8 @@ namespace hyquic
                     throw frame_format_spec_error("Maximum number of reference IDs reached.");
             }
 
-            virtual size_t size() = 0;
-            // TODO
+            virtual inline size_t size() const = 0;
+            virtual inline void encode(buffer_view &target) const = 0;
         };
 
         struct var_int_component : public format_component
@@ -72,6 +97,17 @@ namespace hyquic
             var_int_component(uint8_t ref_id = 0)
                 : format_component(ref_id)
             {
+            }
+
+            inline size_t size() const
+            {
+                return 1;
+            }
+
+            inline void encode(buffer_view &target) const
+            {
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT << 6);
+                target.push_int<NETWORK>(header, 1);
             }
         };
 
@@ -83,6 +119,18 @@ namespace hyquic
                 : format_component(ref_id), length(length)
             {
             }
+
+            inline size_t size() const
+            {
+                return 1 + get_var_int_length(length);
+            }
+
+            inline void encode(buffer_view &target) const
+            {
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN << 6);
+                target.push_int<NETWORK>(header, 1);
+                target.push_var(length);
+            }
         };
 
         struct mult_const_decl_len_component : public format_component
@@ -92,6 +140,18 @@ namespace hyquic
             mult_const_decl_len_component(uint8_t constant, uint8_t ref_id = 0)
                 : format_component(ref_id), constant(constant)
             {
+            }
+
+            inline size_t size() const
+            {
+                return 2;
+            }
+
+            inline void encode(buffer_view &target) const
+            {
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 6);
+                target.push_int<NETWORK>(header, 1);
+                target.push_int<NETWORK>(constant, 1);
             }
         };
 
@@ -103,9 +163,29 @@ namespace hyquic
                 : format_component(ref_id), scope(scope)
             {
             }
+
+            inline size_t size() const
+            {
+                return 2 + scope.size();
+            }
+
+            inline void encode(buffer_view &target) const
+            {
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 6);
+                target.push_int<NETWORK>(header, 1);
+
+                size_t scope_length = scope.size();
+                if (!scope_length)
+                    throw frame_format_spec_error("Scope must not be empty.");
+                if (scope_length >= (1 << 8))
+                    throw frame_format_spec_error("Scope is too large.");
+
+                target.push_int<NETWORK>(scope_length, 1);
+                target.push_buff_into(scope.get_specification());
+            }
         };
 
-        std::vector<format_component> components;
+        std::vector<std::unique_ptr<format_component>> components;
         uint8_t ref_id_counter = 1;
     };
 
@@ -116,9 +196,9 @@ namespace hyquic
 
     inline buffer fixed_length_frame_format_specification(uint32_t length)
     {
-        // TODO
-
-        return frame_format_specification_builder().get_specification();
+        frame_format_specification_builder builder;
+        builder.add_fix_len_component(length);
+        return builder.get_specification();
     }
 } // namespace hyquic
 
