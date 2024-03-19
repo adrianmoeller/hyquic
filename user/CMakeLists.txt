@@ -32,7 +32,10 @@ target_link_libraries(ffs_test PUBLIC hyquic)
 
 add_test(buffer_test buffer_test)
 add_test(sample_test ${SERVER_CLIENT_TEST_RUNNER} sample_test)
-add_test(ffs_test ${SERVER_CLIENT_TEST_RUNNER} -a 0 ffs_test)
+add_test(ffs_test0 ${SERVER_CLIENT_TEST_RUNNER} -a 0 ffs_test)
+add_test(ffs_test1 ${SERVER_CLIENT_TEST_RUNNER} -a 1 ffs_test)
+add_test(ffs_test2 ${SERVER_CLIENT_TEST_RUNNER} -a 2 ffs_test)
+add_test(ffs_test3 ${SERVER_CLIENT_TEST_RUNNER} -a 3 ffs_test)
 
 # PACKAGING
 

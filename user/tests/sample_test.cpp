@@ -57,8 +57,7 @@ public:
     uint32_t handle_frame(uint64_t type, buffer_view frame_content)
     {
         uint64_t content;
-        switch (type)
-        {
+        switch (type) {
         case 0xb1: {
             content = frame_content.pull_int<NETWORK>(1);
             BCE(content, 42);

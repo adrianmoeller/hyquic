@@ -22,7 +22,54 @@ public:
     ffs_extension(hyquic::hyquic &container)
         : container(container), frame_received(false)
     {
-        // TODO
+        frame_format_specification_builder b0;
+        b0.add_var_int_component();
+
+        frame_details.push_back(si::frame_details_container(
+            0xb0,
+            true,
+            false,
+            true,
+            b0.get_specification()
+        ));
+
+        frame_format_specification_builder b1;
+        b1.add_fix_len_component(5);
+
+        frame_details.push_back(si::frame_details_container(
+            0xb1,
+            true,
+            false,
+            true,
+            b1.get_specification()
+        ));
+
+        frame_format_specification_builder b2;
+        uint8_t ref_id2 = b2.add_var_int_component(true);
+        b2.add_mult_const_decl_len_component(ref_id2, 2);
+
+        frame_details.push_back(si::frame_details_container(
+            0xb2,
+            true,
+            false,
+            true,
+            b2.get_specification()
+        ));
+
+        frame_format_specification_builder b3_scope;
+        b3_scope.add_var_int_component();
+
+        frame_format_specification_builder b3;
+        uint8_t ref_id3 = b3.add_fix_len_component(1, true);
+        b3.add_mult_scope_decl_len_component(ref_id3, b3_scope);
+
+        frame_details.push_back(si::frame_details_container(
+            0xb3,
+            true,
+            false,
+            true,
+            b3.get_specification()
+        ));
     }
 
     inline buffer transport_parameter()
@@ -43,7 +90,38 @@ public:
 
     uint32_t handle_frame(uint64_t type, buffer_view frame_content)
     {
-        // TODO
+        std::lock_guard<std::mutex> lk(mut);
+        frame_received = true;
+        frame_cond.notify_all();
+
+        switch (type) {
+        case 0xb0: {
+            uint64_t content;
+            uint8_t content_len = frame_content.pull_var(content);
+            BCE(content, 42);
+            return content_len;
+        }
+        case 0xb1: {
+            uint32_t content0 = frame_content.pull_int<NETWORK>(4);
+            BCE(content0, 42);
+            uint32_t content1 = frame_content.pull_int<NETWORK>(1);
+            BCE(content1, 21);
+            return 4 + 1;
+        }
+        case 0xb2: {
+            uint64_t content;
+            uint8_t content_len = frame_content.pull_var(content);
+            BCE(content, 3);
+            uint32_t content0 = frame_content.pull_int<NETWORK>(3);
+            BCE(content0, 456);
+            uint32_t content1 = frame_content.pull_int<NETWORK>(3);
+            BCE(content1, 789);
+            return content_len + 3 + 3;
+        }
+        case 0xb3: {
+            // TODO
+        }
+        }
         return 0;
     }
 
@@ -66,7 +144,34 @@ void client_send_frame(hyquic_client &client, int test_case)
     std::list<buffer> frames_to_send;
 
     switch(test_case) {
+    case 0: {
+        buffer frame_buff(2 + 1);
+        buffer_view cursor(frame_buff);
+        cursor.push_var(0xb0);
+        cursor.push_var(42);
+        frames_to_send.push_back(std::move(frame_buff));
+        break;
+    }
     case 1: {
+        buffer frame_buff(2 + 5);
+        buffer_view cursor(frame_buff);
+        cursor.push_var(0xb1);
+        cursor.push_int<NETWORK>(42, 4);
+        cursor.push_int<NETWORK>(21, 1);
+        frames_to_send.push_back(std::move(frame_buff));
+        break;
+    }
+    case 2: {
+        buffer frame_buff(2 + 1 + 3 + 3);
+        buffer_view cursor(frame_buff);
+        cursor.push_var(0xb2);
+        cursor.push_var(3);
+        cursor.push_int<NETWORK>(456, 3);
+        cursor.push_int<NETWORK>(789, 3);
+        frames_to_send.push_back(std::move(frame_buff));
+        break;
+    }
+    case 3: {
         // TODO
         break;
     }

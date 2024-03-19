@@ -6,7 +6,7 @@ EXIT_CODE=0
 THIS_DIR=$(dirname "$0")
 ADDITIONAL_ARGS=''
 
-while getopts "s:c:" opt; do
+while getopts "s:c:a:" opt; do
     case ${opt} in
         s)
             SERVER_ARGS=${OPTARG}
