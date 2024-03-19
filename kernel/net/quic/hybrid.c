@@ -381,7 +381,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
         if (frame_details_cont) {
             frame_details = &frame_details_cont->details;
             if (frame_details->format_specification_avail) {
-                ret = hyquic_parse_frame_content(tmp_data_ptr, len, frame_details_cont->format_specification, frame_details->format_specification_avail, &parsed_frame_content_length);
+                ret = hyquic_parse_frame_content(sk, tmp_data_ptr, len, frame_details_cont->format_specification, frame_details->format_specification_avail, &parsed_frame_content_length);
                 if (ret)
                     return ret;
                 frame_len = frame_type_len + parsed_frame_content_length;
@@ -559,7 +559,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
 
     if (frame_details->format_specification_avail) {
         frame_type_len = quic_var_len(frame_details->frame_type);
-        ret = hyquic_parse_frame_content(skb->data + frame_type_len, skb->len - frame_type_len, frame_details_cont->format_specification, frame_details->format_specification_avail, &parsed_frame_content_length);
+        ret = hyquic_parse_frame_content(sk, skb->data + frame_type_len, skb->len - frame_type_len, frame_details_cont->format_specification, frame_details->format_specification_avail, &parsed_frame_content_length);
         if (ret)
             return ret;
         frame_len = frame_type_len + parsed_frame_content_length;
