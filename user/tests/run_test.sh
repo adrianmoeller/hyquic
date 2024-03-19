@@ -4,6 +4,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 EXIT_CODE=0
 THIS_DIR=$(dirname "$0")
+ADDITIONAL_ARGS=''
 
 while getopts "s:c:" opt; do
     case ${opt} in
@@ -12,6 +13,9 @@ while getopts "s:c:" opt; do
             ;;
         c)
             CLIENT_ARGS=${OPTARG}
+            ;;
+        a)
+            ADDITIONAL_ARGS=${OPTARG}
             ;;
         ?)
             exit 1
@@ -28,13 +32,13 @@ shift $(($OPTIND - 1))
 APP_EXEC="${THIS_DIR}/../build/$@"
 
 rm -f test.tmp
-timeout -k 20s 20s ${APP_EXEC} -- server ${SERVER_ARGS} &> test.tmp &
+timeout -k 20s 20s ${APP_EXEC} -- server ${SERVER_ARGS} ${ADDITIONAL_ARGS} &> test.tmp &
 SERVER_PID=$!
 trap "kill ${SERVER_PID}; exit ${EXIT_CODE}" SIGINT
 sleep 1
 
 echo -e "${YELLOW}<Client>${NC}"
-${APP_EXEC} -- client ${CLIENT_ARGS}
+${APP_EXEC} -- client ${CLIENT_ARGS} ${ADDITIONAL_ARGS}
 CLIENT_EXIT_CODE=$?
 [ "${CLIENT_EXIT_CODE}" != "0" ] && EXIT_CODE=${CLIENT_EXIT_CODE}
 

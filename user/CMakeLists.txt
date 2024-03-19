@@ -27,8 +27,12 @@ target_link_libraries(buffer_test PUBLIC hyquic)
 add_executable(sample_test tests/sample_test.cpp)
 target_link_libraries(sample_test PUBLIC hyquic)
 
+add_executable(ffs_test tests/ffs_test.cpp)
+target_link_libraries(ffs_test PUBLIC hyquic)
+
 add_test(buffer_test buffer_test)
 add_test(sample_test ${SERVER_CLIENT_TEST_RUNNER} sample_test)
+add_test(ffs_test ${SERVER_CLIENT_TEST_RUNNER} -a 0 ffs_test)
 
 # PACKAGING
 
