@@ -354,6 +354,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 	struct quic_stream_info *s = NULL;
 	struct quic_stream_table *streams;
 	struct cmsghdr *cmsg;
+	bool has_hyquic_info = false;
 	int err;
 
 	for_each_cmsghdr(cmsg, msg) {
@@ -377,7 +378,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 			s = CMSG_DATA(cmsg);
 			sinfo->stream_id = s->stream_id;
 			sinfo->stream_flag = s->stream_flag;
-			*has_hinfo = true;
+			*has_sinfo = true;
 			break;
 		case HYQUIC_INFO:
 			if (!quic_hyquic(sk)->enabled)
@@ -387,12 +388,13 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 			err = hyquic_process_usrquic_data(sk, &msg->msg_iter, CMSG_DATA(cmsg));
 			if (err)
 				return err;
+			has_hyquic_info = true;
 			break;
 		default:
 			return -EINVAL;
 		}
 	}
-	if (i)
+	if (i || has_hyquic_info)
 		return 0;
 
 	if (!s) { /* stream info is not set, try to use msg_flags*/
@@ -407,6 +409,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 		if (msg->msg_flags & MSG_DATAGRAM)
 			sinfo->stream_flag |= QUIC_STREAM_FLAG_DATAGRAM;
 		sinfo->stream_id = -1;
+		*has_sinfo = true;
 	}
 
 	if (sinfo->stream_id != -1)
