@@ -112,14 +112,22 @@ public:
             uint64_t content;
             uint8_t content_len = frame_content.pull_var(content);
             BCE(content, 3);
-            uint32_t content0 = frame_content.pull_int<NETWORK>(3);
+            uint32_t content0 = frame_content.pull_int<NETWORK>(2);
             BCE(content0, 456);
-            uint32_t content1 = frame_content.pull_int<NETWORK>(3);
+            uint32_t content1 = frame_content.pull_int<NETWORK>(4);
             BCE(content1, 789);
             return content_len + 3 + 3;
         }
         case 0xb3: {
-            // TODO
+            uint32_t content0 = frame_content.pull_int<NETWORK>(1);
+            BCE(content0, 2);
+            uint64_t content1;
+            uint8_t content1_len = frame_content.pull_var(content1);
+            BCE(content1, 9999);
+            uint64_t content2;
+            uint8_t content2_len = frame_content.pull_var(content2);
+            BCE(content2, 42);
+            return 1 + content1_len + content2_len;
         }
         }
         return 0;
@@ -166,13 +174,19 @@ void client_send_frame(hyquic_client &client, int test_case)
         buffer_view cursor(frame_buff);
         cursor.push_var(0xb2);
         cursor.push_var(3);
-        cursor.push_int<NETWORK>(456, 3);
-        cursor.push_int<NETWORK>(789, 3);
+        cursor.push_int<NETWORK>(456, 2);
+        cursor.push_int<NETWORK>(789, 4);
         frames_to_send.push_back(std::move(frame_buff));
         break;
     }
     case 3: {
-        // TODO
+        buffer frame_buff(2 + 1 + 2 + 1);
+        buffer_view cursor(frame_buff);
+        cursor.push_var(0xb3);
+        cursor.push_int<NETWORK>(2, 1);
+        cursor.push_var(9999);
+        cursor.push_var(42);
+        frames_to_send.push_back(std::move(frame_buff));
         break;
     }
     }

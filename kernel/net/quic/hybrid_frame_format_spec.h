@@ -23,8 +23,13 @@ static inline int hyquic_ref_id_to_index(struct sock *sk, struct hyquic_frame_fo
         return -EINVAL;
     }
     cont->ref_id_index[ref_id - 1] = length_value;
-    HQ_PR_DEBUG(sk, "done, ref_id=%u", ref_id);
+    HQ_PR_DEBUG(sk, "done, ref_id=%u, length_value=%llu", ref_id, length_value);
     return 0;
+}
+
+static inline uint64_t hyquic_declared_length_from_index(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+{
+    return cont->ref_id_index[ref_id - 1];
 }
 
 static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
@@ -38,7 +43,6 @@ static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_
         return -EINVAL;
     }
 
-    cont->parsed_len += value_len;
     cont->spec_cursor++;
     cont->spec_length--;
 
@@ -65,8 +69,6 @@ static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_
         return -EINVAL;
     }
     cont->spec_length = spec_length_tmp;
-
-    cont->parsed_len += length_value;
 
     if (ref_id) {
         if (length_value_len > 4) {
@@ -98,7 +100,7 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
         return -EINVAL;
     }
 
-    declared_length = cont->ref_id_index[ref_id];
+    declared_length = hyquic_declared_length_from_index(sk, cont, ref_id);
 
     cont->spec_cursor++;
     cont->spec_length--;
@@ -112,7 +114,7 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
     }
 
     if (!declared_length) {
-        HQ_PR_DEBUG(sk, "done, decl_length=%llu, constant=%u, remain_spec_length=%u", declared_length, constant, cont->spec_length);
+        HQ_PR_DEBUG(sk, "done, ref_id=%u, decl_length=%llu, constant=%u, remain_spec_length=%u", ref_id, declared_length, constant, cont->spec_length);
         return 0;
     }
 
@@ -121,7 +123,7 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
     cont->content_cursor += product;
     cont->content_length -= product;
 
-    HQ_PR_DEBUG(sk, "done, decl_length=%llu, constant=%u, remain_spec_length=%u", declared_length, constant, cont->spec_length);
+    HQ_PR_DEBUG(sk, "done, ref_id=%u, decl_length=%llu, constant=%u, remain_spec_length=%u", ref_id, declared_length, constant, cont->spec_length);
     return 0;
 }
 
@@ -139,7 +141,7 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
         return -EINVAL;
     }
 
-    declared_length = cont->ref_id_index[ref_id];
+    declared_length = hyquic_declared_length_from_index(sk, cont, ref_id);
 
     cont->spec_cursor++;
     cont->spec_length--;
@@ -165,8 +167,7 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
             .spec_length = scope_length,
             .spec_cursor = cont->spec_cursor,
             .content_length = cont->content_length,
-            .content_cursor = cont->content_cursor,
-            .parsed_len = cont->parsed_len
+            .content_cursor = cont->content_cursor
         };
         memcpy(scope_cont.ref_id_index, cont->ref_id_index, sizeof(cont->ref_id_index));
 
@@ -178,7 +179,6 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
 
         cont->content_cursor = scope_cont.content_cursor;
         cont->content_length = scope_cont.content_length;
-        cont->parsed_len = scope_cont.parsed_len;
     }
 
     cont->spec_cursor += scope_length;
@@ -216,7 +216,6 @@ static inline int hyquic_parse_frame_content(struct sock *sk, uint8_t *frame_con
         .spec_cursor = format_specification,
         .content_length = remaining_length,
         .content_cursor = frame_content,
-        .parsed_len = 0,
         .ref_id_index = {0}
     };
 
@@ -228,7 +227,7 @@ static inline int hyquic_parse_frame_content(struct sock *sk, uint8_t *frame_con
             return err;
     }
 
-    *parsed_length = cont.parsed_len;
+    *parsed_length = cont.content_cursor - frame_content;
     HQ_PR_DEBUG(sk, "done, parsed=%u", *parsed_length);
     return 0;
 }
