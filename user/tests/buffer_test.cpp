@@ -23,11 +23,11 @@ BOOST_AUTO_TEST_CASE(buffer_view_prune)
     buffer b(20);
     buffer_view bv(b);
 
-    BCE(bv.prune(19), true);
+    bv.prune(19);
     BCE(bv.end(), false);
-    BCE(bv.prune(1), true);
+    bv.prune(1);
     BCE(bv.end(), true);
-    BCE(bv.prune(1), false);
+    BOOST_CHECK_THROW(bv.prune(1), buffer_error);
 }
 
 BOOST_AUTO_TEST_CASE(buffer_view_push_var)

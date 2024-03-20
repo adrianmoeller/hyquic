@@ -276,26 +276,20 @@ namespace hyquic
         {
             int ret = data.len;
             if (info.incompl) {
-                if (hyquic_data_frag.buff.empty()) {
+                if (hyquic_data_frag.buff.empty())
                     hyquic_data_frag.init(info.type, info.data_length);
-                } else {
-                    if (hyquic_data_frag.type != info.type)
-                        return -EFAULT;
-                }
-                if (!hyquic_data_frag.buff_view.push_buff_into(std::move(data)))
-                    return -EFAULT;
+                else
+                    assert(hyquic_data_frag.type == info.type);
+                hyquic_data_frag.buff_view.push_buff_into(std::move(data));
             } else {
                 if (hyquic_data_frag.buff.empty()) {
                     boost::asio::post(common_context, [this, mvd_data = std::move(data), type = info.type, details = info.details]() {
                         hyquic::handle_hyquic_data(mvd_data, type, details);
                     });
                 } else {
-                    if (hyquic_data_frag.type != info.type)
-                        return -EFAULT;
-                    if (!hyquic_data_frag.buff_view.push_buff_into(std::move(data)))
-                        return -EFAULT;
-                    if (!hyquic_data_frag.buff_view.end())
-                        return -EFAULT;
+                    assert(hyquic_data_frag.type == info.type);
+                    hyquic_data_frag.buff_view.push_buff_into(std::move(data));
+                    assert(hyquic_data_frag.buff_view.end());
                     boost::asio::post(common_context, [this, mvd_data = std::move(hyquic_data_frag.buff), type = info.type, details = info.details]() {
                         hyquic::handle_hyquic_data(mvd_data, type, details);
                     });

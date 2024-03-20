@@ -10,6 +10,7 @@
 #include <chrono>
 #include <optional>
 #include <boost/endian/conversion.hpp>
+#include "errors.hpp"
 
 namespace hyquic
 {
@@ -106,19 +107,20 @@ namespace hyquic
             return *this;
         }
 
-        inline bool prune(uint32_t bytes)
+        inline void prune(uint32_t bytes)
         {
-            if (bytes > len)
-                return false;
+            if (len < bytes)
+                throw buffer_error("Buffer write overflow.");
+
             data += bytes;
             len -= bytes;
-            return true;
         }
 
         inline buffer copy(uint32_t len) const
         {
-            if (len > this->len)
-                return buffer();
+            if (this->len < len)
+                throw buffer_error("Buffer read overflow.");
+            
             buffer copied(len);
             memcpy(copied.data, data, copied.len);
             return copied;
@@ -132,7 +134,7 @@ namespace hyquic
         inline uint8_t pull_var(uint64_t &val)
         {
             if (end())
-                return 0;
+                throw buffer_error("Buffer read overflow.");
 
             uint8_t val_len = (uint8_t) (1u << (*data >> 6));
             if (len < val_len)
@@ -168,6 +170,9 @@ namespace hyquic
         template<endian_order Order>
         inline uint32_t pull_int(uint8_t len)
         {
+            if (this->len < len)
+                throw buffer_error("Buffer read overflow.");
+
             uint32_t val = 0;
             switch (len)
             {
@@ -190,52 +195,63 @@ namespace hyquic
             return val;
         }
 
-        inline bool push(const uint8_t *data, uint32_t len)
+        inline void push(const uint8_t *data, uint32_t len)
         {
-            if (len > this->len)
-                return false;
+            if (this->len < len)
+                throw buffer_error("Buffer write overflow.");
+
             memcpy(this->data, data, len);
             this->data += len;
             this->len -= len;
-            return true;
         }
 
         template<typename T>
-        inline bool push(const T &data)
+        inline void push(const T &data)
         {
             return push((uint8_t*) &data, sizeof(T));
         }
 
-        inline bool push_buff_into(buffer &&buff)
+        inline void push_buff_into(buffer &&buff)
         {
             return push(buff.data, buff.len);
         }
 
-        inline bool push_buff(const buffer &buff)
+        inline void push_buff(const buffer &buff)
         {
             return push(buff.data, buff.len);
         }
 
         inline void push_var(uint64_t val)
         {
-            dyn_num num;
             if (val < 64) {
+                if (this->len < 1)
+                    throw buffer_error("Buffer write overflow.");
+
                 *data = (uint8_t) val;
                 data += 1;
                 len -= 1;
             } else if (val < 16384) {
+                if (this->len < 2)
+                    throw buffer_error("Buffer write overflow.");
+
                 uint16_t num = boost::endian::native_to_big((uint16_t) val);
                 memcpy(data, &num, 2);
                 *data |= 0x40;
                 data += 2;
                 len -= 2;
             } else if (val < 1073741824) {
+                if (this->len < 4)
+                    throw buffer_error("Buffer write overflow.");
+
                 uint32_t num = boost::endian::native_to_big((uint32_t) val);
                 memcpy(data, &num, 4);
                 *data |= 0x80;
                 data += 4;
                 len -= 4;
             } else {
+                if (this->len < 8)
+                    throw buffer_error("Buffer write overflow.");
+
                 uint64_t num = boost::endian::native_to_big((uint64_t) val);
                 memcpy(data, &num, 8);
                 *data |= 0xc0;
@@ -247,6 +263,9 @@ namespace hyquic
         template<endian_order Order>
         inline void push_int(uint32_t val, uint8_t len)
         {
+            if (this->len < len)
+                throw buffer_error("Buffer write overflow.");
+
             switch (len)
             {
             case 1:
@@ -262,6 +281,8 @@ namespace hyquic
                 memcpy(data, &num, 4);
                 break;
             }
+            default:
+                throw buffer_error("Length not supported.");
             }
             data += len;
             this->len -= len;

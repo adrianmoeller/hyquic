@@ -46,6 +46,11 @@ namespace hyquic
     {
         using error::error;
     };
+
+    class buffer_error : public error
+    {
+        using error::error;
+    };
 } // namespace hyquic
 
 
