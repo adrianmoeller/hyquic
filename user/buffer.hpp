@@ -34,6 +34,12 @@ namespace hyquic
         {
         }
 
+        buffer(const char* str)
+            : buffer(strlen(str))
+        {
+            strcpy((char*) data, str);
+        }
+
         buffer(const buffer&) = delete;
         buffer& operator=(buffer&) = delete;
 

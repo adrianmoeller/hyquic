@@ -120,6 +120,14 @@ void test_client(int argc, char *argv[])
     BOOST_ASSERT(ext.frame_received);
     lk.unlock();
 
+    buffer msg_to_send("Hello, HyQUIC server!");
+    uint32_t msg_to_send_len = msg_to_send.len;
+    BCE(client.send_msg(stream_data(0, QUIC_STREAM_FLAG_NEW | QUIC_STREAM_FLAG_FIN, std::move(msg_to_send))), msg_to_send_len);
+
+    std::optional<stream_data> msg_received = client.receive_msg(std::chrono::seconds(3));
+    BOOST_ASSERT(msg_received);
+    BCE((char*) msg_received->buff.data, "Hello, HyQUIC client!");
+
     client.close();
 }
 
@@ -148,6 +156,14 @@ void test_server(int argc, char *argv[])
     ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.frame_received;});
     BOOST_ASSERT(ext.frame_received);
     lk.unlock();
+
+    std::optional<stream_data> msg_received = connection.receive_msg(std::chrono::seconds(3));
+    BOOST_ASSERT(msg_received);
+    BCE((char*) msg_received->buff.data, "Hello, HyQUIC server!");
+
+    buffer msg_to_send("Hello, HyQUIC client!");
+    uint32_t msg_to_send_len = msg_to_send.len;
+    BCE(connection.send_msg(stream_data(1, QUIC_STREAM_FLAG_NEW | QUIC_STREAM_FLAG_FIN, std::move(msg_to_send))), msg_to_send_len);
 
     connection.close();
 }

@@ -5,11 +5,6 @@ namespace hyquic
     class hyquic_server_connection : public hyquic 
     {
     public:
-        ~hyquic_server_connection()
-        {
-            si::socket_close(sockfd);
-        }
-        
         inline void connect_to_client(char *pkey_path, char *cert_path)
         {
             int err = quic_server_handshake(sockfd, pkey_path, cert_path);
