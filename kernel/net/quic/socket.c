@@ -1349,7 +1349,7 @@ static int quic_sock_set_connection_close(struct sock *sk, struct quic_connectio
 
 static int hyquic_sock_set_options(struct sock *sk, struct hyquic_options *options, uint32_t length)
 {
-	struct hyquic_adapter *hyquic = quic_hyquic(sk);
+	struct hyquic_container *hyquic = quic_hyquic(sk);
 	
 	if (length != sizeof(*options))
 		return -EINVAL;

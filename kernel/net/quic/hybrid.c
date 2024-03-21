@@ -20,7 +20,7 @@ struct hyquic_frame_details_entry {
 
 inline void hyquic_enable(struct sock *sk)
 {
-    struct hyquic_adapter *hyquic = quic_hyquic(sk);
+    struct hyquic_container *hyquic = quic_hyquic(sk);
 
     if (hyquic->enabled)
         return;
@@ -45,7 +45,7 @@ static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details
 	return 0;
 }
 
-int hyquic_init(struct hyquic_adapter *hyquic, struct sock *sk)
+int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
 {
     hyquic->enabled = false;
     hyquic->sk = sk;
@@ -95,7 +95,7 @@ static void hyquic_transport_params_free(struct list_head *param_list)
     }
 }
 
-void hyquic_free(struct hyquic_adapter *hyquic)
+void hyquic_free(struct hyquic_container *hyquic)
 {
     hyquic_transport_params_free(&hyquic->transport_params_remote);
     hyquic_transport_params_free(&hyquic->transport_params_local);
@@ -135,7 +135,7 @@ static inline struct hyquic_transport_param* hyquic_transport_param_create(uint6
     return param;
 }
 
-static inline int hyquic_frame_details_create(struct hyquic_adapter *hyquic, struct hyquic_frame_details *frame_details, uint8_t *format_specification)
+static inline int hyquic_frame_details_create(struct hyquic_container *hyquic, struct hyquic_frame_details *frame_details, uint8_t *format_specification)
 {
     struct quic_hash_head *head;
     struct hyquic_frame_details_entry *entry;
@@ -157,7 +157,7 @@ static inline int hyquic_frame_details_create(struct hyquic_adapter *hyquic, str
     return 0;
 }
 
-struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_adapter *hyquic, uint64_t frame_type)
+struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_container *hyquic, uint64_t frame_type)
 {
     struct quic_hash_head *head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_type);
     struct hyquic_frame_details_entry *cursor;
@@ -170,12 +170,12 @@ struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_adapter
     return NULL;
 }
 
-inline bool hyquic_is_usrquic_frame(struct hyquic_adapter *hyquic, uint64_t frame_type)
+inline bool hyquic_is_usrquic_frame(struct hyquic_container *hyquic, uint64_t frame_type)
 {
     return hyquic_frame_details_get(hyquic, frame_type);
 }
 
-int hyquic_set_local_transport_parameter(struct hyquic_adapter *hyquic, void *data, uint32_t length)
+int hyquic_set_local_transport_parameter(struct hyquic_container *hyquic, void *data, uint32_t length)
 {
     struct hyquic_transport_param *entry;
 	uint64_t param_id;
@@ -219,7 +219,7 @@ int hyquic_set_local_transport_parameter(struct hyquic_adapter *hyquic, void *da
 	return 0;
 }
 
-int hyquic_get_remote_transport_parameters(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen)
+int hyquic_get_remote_transport_parameters(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen)
 {
     uint32_t total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
 	char __user *pos = optval;
@@ -244,7 +244,7 @@ int hyquic_get_remote_transport_parameters(struct hyquic_adapter *hyquic, int le
 	return 0;
 }
 
-int hyquic_get_remote_transport_parameters_length(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen)
+int hyquic_get_remote_transport_parameters_length(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen)
 {
     uint32_t total_params_length;
 
@@ -259,7 +259,7 @@ int hyquic_get_remote_transport_parameters_length(struct hyquic_adapter *hyquic,
 	return 0;
 }
 
-int hyquic_handle_remote_transport_parameter(struct hyquic_adapter *hyquic, uint64_t id, uint8_t **pp, uint32_t *plen)
+int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, uint64_t id, uint8_t **pp, uint32_t *plen)
 {
     uint32_t id_length = quic_var_len(id);
     uint8_t *tp_start = *pp - id_length;
@@ -290,7 +290,7 @@ int hyquic_handle_remote_transport_parameter(struct hyquic_adapter *hyquic, uint
     return 0;
 }
 
-int hyquic_transfer_local_transport_parameters(struct hyquic_adapter *hyquic, uint8_t **pp, uint8_t *data)
+int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, uint8_t **pp, uint8_t *data)
 {
     struct hyquic_transport_param *cursor;
 

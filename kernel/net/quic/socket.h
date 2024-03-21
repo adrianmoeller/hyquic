@@ -84,7 +84,7 @@ struct quic_sock {
 	struct quic_cong		cong;
 	struct quic_timer		timers[QUIC_TIMER_MAX];
 
-	struct hyquic_adapter hyquic;
+	struct hyquic_container hyquic;
 };
 
 struct quic6_sock {
@@ -228,7 +228,7 @@ static inline void quic_set_state(struct sock *sk, int state)
 	sk->sk_state_change(sk);
 }
 
-static inline struct hyquic_adapter* quic_hyquic(const struct sock *sk)
+static inline struct hyquic_container* quic_hyquic(const struct sock *sk)
 {
 	return &quic_sk(sk)->hyquic;
 }

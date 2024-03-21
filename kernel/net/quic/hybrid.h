@@ -13,7 +13,7 @@ struct hyquic_transport_param {
     size_t length;
 };
 
-struct hyquic_adapter {
+struct hyquic_container {
     bool enabled;
     struct sock *sk;
     struct hyquic_options options;
@@ -50,15 +50,15 @@ struct hyquic_rcv_cb {
 #define HYQUIC_RCV_CB(__skb) ((struct hyquic_rcv_cb *)&((__skb)->cb[0]))
 
 inline void hyquic_enable(struct sock *sk);
-int hyquic_init(struct hyquic_adapter *hyquic, struct sock *sk);
-void hyquic_free(struct hyquic_adapter *hyquic);
-struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_adapter *hyquic, uint64_t frame_type);
-inline bool hyquic_is_usrquic_frame(struct hyquic_adapter *hyquic, uint64_t frame_type);
-int hyquic_set_local_transport_parameter(struct hyquic_adapter *hyquic, void *data, uint32_t length);
-int hyquic_get_remote_transport_parameters(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen);
-int hyquic_get_remote_transport_parameters_length(struct hyquic_adapter *hyquic, int len, char __user *optval, int __user *optlen);
-int hyquic_handle_remote_transport_parameter(struct hyquic_adapter *hyquic, uint64_t type, uint8_t **pp, uint32_t *plen);
-int hyquic_transfer_local_transport_parameters(struct hyquic_adapter *hyquic, uint8_t **pp, uint8_t *data);
+int hyquic_init(struct hyquic_container *hyquic, struct sock *sk);
+void hyquic_free(struct hyquic_container *hyquic);
+struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_container *hyquic, uint64_t frame_type);
+inline bool hyquic_is_usrquic_frame(struct hyquic_container *hyquic, uint64_t frame_type);
+int hyquic_set_local_transport_parameter(struct hyquic_container *hyquic, void *data, uint32_t length);
+int hyquic_get_remote_transport_parameters(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen);
+int hyquic_get_remote_transport_parameters_length(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen);
+int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, uint64_t type, uint8_t **pp, uint32_t *plen);
+int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, uint8_t **pp, uint8_t *data);
 int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_ctrlsend_info *info);
 int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered);
 inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk);

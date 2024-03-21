@@ -387,7 +387,7 @@ unlink:
 
 void quic_outq_retransmit(struct sock *sk)
 {
-	struct hyquic_adapter *hyquic = quic_hyquic(sk);
+	struct hyquic_container *hyquic = quic_hyquic(sk);
 	struct quic_outqueue *outq = quic_outq(sk);
 	struct quic_snd_cb *snd_cb;
 	struct sk_buff_head *head;
