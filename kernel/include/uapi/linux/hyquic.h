@@ -14,7 +14,7 @@ enum hyquic_ctrl_type {
 };
 
 struct hyquic_ctrl_raw_frames {
-	uint64_t first_frame_seqnum;
+	// NO-DATA
 };
 
 struct hyquic_ctrlsend_raw_frames_var {

@@ -21,7 +21,6 @@ struct hyquic_adapter {
     struct list_head transport_params_remote;
     struct list_head transport_params_local;
 
-    uint64_t next_usrquic_frame_seqnum;
     uint64_t next_ic_msg_id;
     struct sk_buff_head usrquic_frames_outqueue;
     struct sk_buff_head unkwn_frames_fix_inqueue;
@@ -38,7 +37,6 @@ struct hyquic_frame_details_cont {
 
 struct hyquic_snd_cb {
     struct quic_snd_cb common;
-    uint64_t usrquic_frame_seqnum;
 };
 
 #define HYQUIC_SND_CB(__skb) ((struct hyquic_snd_cb *)&((__skb)->cb[0]))

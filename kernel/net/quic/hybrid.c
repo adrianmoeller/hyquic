@@ -54,7 +54,6 @@ int hyquic_init(struct hyquic_adapter *hyquic, struct sock *sk)
     INIT_LIST_HEAD(&hyquic->transport_params_remote);
     INIT_LIST_HEAD(&hyquic->transport_params_local);
 
-    hyquic->next_usrquic_frame_seqnum = 0;
     hyquic->next_ic_msg_id = 0;
     skb_queue_head_init(&hyquic->usrquic_frames_outqueue);
     skb_queue_head_init(&hyquic->unkwn_frames_fix_inqueue);
@@ -308,29 +307,27 @@ int hyquic_transfer_local_transport_parameters(struct hyquic_adapter *hyquic, ui
     return 0;
 }
 
-static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **pdata, uint32_t *pdata_length, uint64_t *pframe_seqnum)
+static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_ptr, uint32_t *data_length_ptr)
 {
     uint32_t frame_length;
     uint64_t frame_type;
     struct sk_buff *skb;
     struct hyquic_snd_cb *snd_cb;
 
-    frame_length = hyquic_ic_get_int(pdata, 4);
-    *pdata_length -= 4;
-    if (!frame_length || frame_length > *pdata_length)
+    frame_length = hyquic_ic_get_int(data_ptr, 4);
+    *data_length_ptr -= 4;
+    if (!frame_length || frame_length > *data_length_ptr)
         return NULL;
-    quic_peek_var(*pdata, &frame_type);
+    quic_peek_var(*data_ptr, &frame_type);
 
     skb = alloc_skb(frame_length, GFP_ATOMIC);
     if (!skb)
 		return NULL;
-    skb_put_data(skb, *pdata, frame_length);
-    *pdata += frame_length;
-    *pdata_length -= frame_length;
+    skb_put_data(skb, *data_ptr, frame_length);
+    *data_ptr += frame_length;
+    *data_length_ptr -= frame_length;
     snd_cb = HYQUIC_SND_CB(skb);
     snd_cb->common.frame_type = frame_type;
-    snd_cb->usrquic_frame_seqnum = *pframe_seqnum;
-    *pframe_seqnum += 1;
 
     HQ_PR_DEBUG(sk, "done, type=%llu, len=%u", frame_type, frame_length);
     return skb;
@@ -339,7 +336,6 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **pdata,
 static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_t data_length, struct hyquic_ctrl_raw_frames *info)
 {
     struct sk_buff *skb;
-    uint64_t frame_seqnum = info->first_frame_seqnum;
 
     if (!quic_is_established(sk)) {
         HQ_PR_ERR(sk, "cannot send user-quic frames when connection is not established");
@@ -347,7 +343,7 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
     }
 
     while (data_length) {
-        skb = hyquic_frame_create_raw(sk, &data, &data_length, &frame_seqnum);
+        skb = hyquic_frame_create_raw(sk, &data, &data_length);
         if (!skb) {
             HQ_PR_ERR(sk, "cannot create frame from user-quic data");
             return -EINVAL;
