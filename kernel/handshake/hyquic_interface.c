@@ -42,10 +42,10 @@ static inline void assemble_frame_data(const struct hyquic_frame *frames, size_t
 
 int hyquic_send_frames(int sockfd, const struct hyquic_frame *frames, size_t num_frames, size_t total_frame_data_length)
 {
-    char outcmsg[CMSG_SPACE(sizeof(struct hyquic_data_sendinfo))];
+    char outcmsg[CMSG_SPACE(sizeof(struct hyquic_ctrlsend_info))];
     size_t data_length = sizeof(frames->length) * num_frames + total_frame_data_length;
     void *data = malloc(data_length);
-    struct hyquic_data_sendinfo *info;
+    struct hyquic_ctrlsend_info *info;
     struct msghdr msg;
     struct cmsghdr *cmsg;
     struct iovec iov;
@@ -69,11 +69,11 @@ int hyquic_send_frames(int sockfd, const struct hyquic_frame *frames, size_t num
     cmsg->cmsg_len = CMSG_LEN(sizeof(*info));
 
     msg.msg_controllen = cmsg->cmsg_len;
-    info = (struct hyquic_data_sendinfo*)CMSG_DATA(cmsg);
-    info->type = HYQUIC_DATA_RAW_FRAMES;
+    info = (struct hyquic_ctrlsend_info*)CMSG_DATA(cmsg);
+    info->type = HYQUIC_CTRL_RAW_FRAMES;
     info->data_length = data_length;
-    info->raw_frames = (struct hyquic_data_raw_frames) {
-        .first_frame_seqnum = 0 // TODO needed?
+    info->raw_frames = (struct hyquic_ctrl_raw_frames) {
+        .first_frame_seqnum = 0
     };
 
     return sendmsg(sockfd, &msg, 0);
@@ -81,7 +81,7 @@ int hyquic_send_frames(int sockfd, const struct hyquic_frame *frames, size_t num
 
 union hyquic_cmsg_content {
     struct quic_stream_info stream;
-    struct hyquic_data_recvinfo hyquic;
+    struct hyquic_ctrlrecv_info hyquic;
 };
 
 int hyquic_receive(int sockfd, const struct hyquic_receive_ops *recv_ops, size_t len)
@@ -119,8 +119,8 @@ int hyquic_receive(int sockfd, const struct hyquic_receive_ops *recv_ops, size_t
             break;
         }
         if (cursor->cmsg_type == HYQUIC_INFO) {
-            memcpy(&info.hyquic, CMSG_DATA(cursor), sizeof(struct hyquic_data_recvinfo));
-            err = recv_ops->recv_hyquic_data(data, &info.hyquic);
+            memcpy(&info.hyquic, CMSG_DATA(cursor), sizeof(struct hyquic_ctrlrecv_info));
+            err = recv_ops->recv_hyquic_ctrl_data(data, &info.hyquic);
             break;
         }
     }

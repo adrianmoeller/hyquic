@@ -7,7 +7,7 @@
 
 struct hyquic_receive_ops {
     int (*recv_stream_data)(const void *data, const struct quic_stream_info *info);
-    int (*recv_hyquic_data)(const void *data, const struct hyquic_data_recvinfo *info);
+    int (*recv_hyquic_ctrl_data)(const void *data, const struct hyquic_ctrlrecv_info *info);
 };
 
 struct hyquic_frame {

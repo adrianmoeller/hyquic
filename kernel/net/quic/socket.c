@@ -383,7 +383,7 @@ static int quic_msghdr_parse(struct sock *sk, struct msghdr *msg, struct quic_ha
 		case HYQUIC_INFO:
 			if (!quic_hyquic(sk)->enabled)
 				return -EINVAL;
-			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_data_sendinfo)))
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct hyquic_ctrlsend_info)))
 				return -EINVAL;
 			err = hyquic_process_usrquic_data(sk, &msg->msg_iter, CMSG_DATA(cmsg));
 			if (err)
@@ -655,7 +655,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 	int err, copy, copied = 0, freed = 0;
 	struct quic_stream_info sinfo = {};
 	int fin, off, event, dgram, level;
-	struct hyquic_data_recvinfo hyquic_data_info = {};
+	struct hyquic_ctrlrecv_info hyquic_data_info = {};
 	struct hyquic_rcv_cb *hyquic_rcv_cb;
 	struct quic_rcv_cb *rcv_cb;
 	struct quic_stream *stream;
@@ -694,9 +694,9 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 			msg->msg_flags |= MSG_DATAGRAM;
 			sinfo.stream_flag |= QUIC_STREAM_FLAG_DATAGRAM;
 		} else if (!stream) {
-			if (hyquic_rcv_cb->hyquic_data_type) {
-				hyquic_data_info.type = hyquic_rcv_cb->hyquic_data_type;
-				hyquic_data_info.details = hyquic_rcv_cb->hyquic_data_details;
+			if (hyquic_rcv_cb->hyquic_ctrl_type) {
+				hyquic_data_info.type = hyquic_rcv_cb->hyquic_ctrl_type;
+				hyquic_data_info.details = hyquic_rcv_cb->hyquic_ctrl_details;
 				hyquic_data_info.data_length = skb->len;
 			} else {
 				hinfo.crypto_level = level;
@@ -728,7 +728,7 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 			break;
 		} else if (!stream) {
 			skb = __skb_dequeue(&sk->sk_receive_queue);
-			if (hyquic_rcv_cb->hyquic_data_type == HYQUIC_DATA_RAW_FRAMES_VAR) {
+			if (hyquic_rcv_cb->hyquic_ctrl_type == HYQUIC_CTRL_RAW_FRAMES_VAR) {
 				__skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred, skb);
 				break;
 			}

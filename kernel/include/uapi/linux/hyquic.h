@@ -5,19 +5,19 @@ struct hyquic_options {
 	uint8_t usrquic_retransmit:1;
 };
 
-enum hyquic_data_type {
-	HYQUIC_DATA_NONE,
-	HYQUIC_DATA_RAW_FRAMES,
-	HYQUIC_DATA_RAW_FRAMES_FIX,
-	HYQUIC_DATA_RAW_FRAMES_VAR,
-	HYQUIC_DATA_LOST_FRAMES,
+enum hyquic_ctrl_type {
+	HYQUIC_CTRL_NONE,
+	HYQUIC_CTRL_RAW_FRAMES,
+	HYQUIC_CTRL_RAW_FRAMES_FIX,
+	HYQUIC_CTRL_RAW_FRAMES_VAR,
+	HYQUIC_CTRL_LOST_FRAMES,
 };
 
-struct hyquic_data_raw_frames {
+struct hyquic_ctrl_raw_frames {
 	uint64_t first_frame_seqnum;
 };
 
-struct hyquic_data_raw_frames_var_send {
+struct hyquic_ctrlsend_raw_frames_var {
 	uint64_t msg_id;
 	uint32_t processed_length;
 	uint8_t ack_eliciting:1;
@@ -25,16 +25,16 @@ struct hyquic_data_raw_frames_var_send {
 	uint8_t non_probing:1;
 };
 
-struct hyquic_data_sendinfo {
-	enum hyquic_data_type type;
+struct hyquic_ctrlsend_info {
+	enum hyquic_ctrl_type type;
 	uint32_t data_length;
 	union {
-		struct hyquic_data_raw_frames raw_frames;
-		struct hyquic_data_raw_frames_var_send raw_frames_var;
+		struct hyquic_ctrl_raw_frames raw_frames;
+		struct hyquic_ctrlsend_raw_frames_var raw_frames_var;
 	};
 };
 
-struct hyquic_data_raw_frames_var_recv {
+struct hyquic_ctrlrecv_raw_frames_var {
 	uint64_t msg_id;
 	uint8_t ack_eliciting:1;
 	uint8_t ack_immediate:1;
@@ -44,15 +44,15 @@ struct hyquic_data_raw_frames_var_recv {
 	uint8_t path_alt:1;
 };
 
-union hyquic_data_recvinfo_details {
-	struct hyquic_data_raw_frames_var_recv raw_frames_var;
+union hyquic_ctrlrecv_info_details {
+	struct hyquic_ctrlrecv_raw_frames_var raw_frames_var;
 };
 
-struct hyquic_data_recvinfo {
-	enum hyquic_data_type type;
+struct hyquic_ctrlrecv_info {
+	enum hyquic_ctrl_type type;
 	uint32_t data_length;
 	uint8_t incompl;
-	union hyquic_data_recvinfo_details details;
+	union hyquic_ctrlrecv_info_details details;
 };
 
 /* HyQUIC Socket Options API */

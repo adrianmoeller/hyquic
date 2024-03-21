@@ -336,7 +336,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **pdata,
     return skb;
 }
 
-static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_t data_length, struct hyquic_data_raw_frames *info)
+static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_t data_length, struct hyquic_ctrl_raw_frames *info)
 {
     struct sk_buff *skb;
     uint64_t frame_seqnum = info->first_frame_seqnum;
@@ -370,7 +370,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
     struct hyquic_frame_details_cont *frame_details_cont;
     struct hyquic_frame_details *frame_details;
     uint32_t parsed_frame_content_length;
-    struct hyquic_data_raw_frames_var_recv *data_details = &HYQUIC_RCV_CB(skb)->hyquic_data_details.raw_frames_var;
+    struct hyquic_ctrlrecv_raw_frames_var *ctrl_details = &HYQUIC_RCV_CB(skb)->hyquic_ctrl_details.raw_frames_var;
 
     while (len > 0)
     {
@@ -405,12 +405,12 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
             }
 
             if (frame_details->ack_eliciting) {
-                data_details->ack_eliciting = 1;
+                ctrl_details->ack_eliciting = 1;
                 if (frame_details->ack_immediate)
-                    data_details->ack_immediate = 1;
+                    ctrl_details->ack_immediate = 1;
             }
             if (frame_details->non_probing)
-                data_details->non_probing = 1;
+                ctrl_details->non_probing = 1;
         } else {
             if (frame_type > QUIC_FRAME_MAX) {
                 pr_err_once("[QUIC] %s unsupported frame %llu\n", __func__, frame_type);
@@ -431,12 +431,12 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
             }
 
             if (quic_frame_ack_eliciting(frame_type)) {
-                data_details->ack_eliciting = 1;
+                ctrl_details->ack_eliciting = 1;
                 if (quic_frame_ack_immediate(frame_type))
-                    data_details->ack_immediate = 1;
+                    ctrl_details->ack_immediate = 1;
             }
             if (quic_frame_non_probing(frame_type))
-                data_details->non_probing = 1;
+                ctrl_details->non_probing = 1;
 
             skb_pull(skb, ret);
 		    len -= ret;
@@ -449,11 +449,11 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
     return 0;
 }
 
-static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_raw_frames_var_send *info)
+static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlsend_raw_frames_var *info)
 {
     struct sk_buff *cursor, *tmp, *fskb;
     struct sk_buff_head *head;
-    struct hyquic_data_raw_frames_var_recv *details;
+    struct hyquic_ctrlrecv_raw_frames_var *details;
     uint8_t level = 0;
     bool found = false;
     int err;
@@ -465,7 +465,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
 
     head = &quic_hyquic(sk)->unkwn_frames_var_deferred;
     skb_queue_walk_safe(head, cursor, tmp) {
-        details = &HYQUIC_RCV_CB(cursor)->hyquic_data_details.raw_frames_var;
+        details = &HYQUIC_RCV_CB(cursor)->hyquic_ctrl_details.raw_frames_var;
         if (details->msg_id == info->msg_id) {
             found = true;
             __skb_unlink(cursor, head);
@@ -478,7 +478,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
     }
     
     skb_pull(cursor, info->processed_length);
-    HQ_PR_DEBUG(sk, "skipped %u bytes parsed by usrquic", info->processed_length);
+    HQ_PR_DEBUG(sk, "skipped %u bytes parsed by user-quic", info->processed_length);
 
     if (info->ack_eliciting) {
         details->ack_eliciting = true;
@@ -511,7 +511,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_data_r
     return 0;
 }
 
-int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_data_sendinfo *info)
+int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_ctrlsend_info *info)
 {
     int err = 0;
     uint8_t *data = (uint8_t*) kmalloc_array(info->data_length, sizeof(uint8_t), GFP_KERNEL);
@@ -529,14 +529,14 @@ int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, stru
     }
 
     switch (info->type) {
-    case HYQUIC_DATA_RAW_FRAMES:
+    case HYQUIC_CTRL_RAW_FRAMES:
         err = hyquic_process_usrquic_frames(sk, data, info->data_length, &info->raw_frames);
         break;
-    case HYQUIC_DATA_RAW_FRAMES_VAR:
+    case HYQUIC_CTRL_RAW_FRAMES_VAR:
         err = hyquic_process_frames_var_reply(sk, &info->raw_frames_var);
         break;
     default:
-        HQ_PR_ERR(sk, "unknown user-quic-data type %i", info->type);
+        HQ_PR_ERR(sk, "unknown user-quic-ctrl type %i", info->type);
         err = -EINVAL;
         break;
     }
@@ -551,7 +551,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
     struct hyquic_frame_details *frame_details = &frame_details_cont->details;
     struct sk_buff *fskb;
     struct hyquic_rcv_cb *rcv_cb;
-    struct hyquic_data_raw_frames_var_recv *details;
+    struct hyquic_ctrlrecv_raw_frames_var *details;
     uint32_t parsed_frame_content_length;
     uint32_t frame_len;
     uint8_t frame_type_len;
@@ -582,8 +582,8 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
 
         rcv_cb = HYQUIC_RCV_CB(fskb);
         rcv_cb->common.path_alt = QUIC_RCV_CB(skb)->path_alt;
-        rcv_cb->hyquic_data_type = HYQUIC_DATA_RAW_FRAMES_VAR;
-        details = &rcv_cb->hyquic_data_details.raw_frames_var;
+        rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_RAW_FRAMES_VAR;
+        details = &rcv_cb->hyquic_ctrl_details.raw_frames_var;
         details->msg_id = quic_hyquic(sk)->next_ic_msg_id++;
         details->ack_eliciting = pki->ack_eliciting;
         details->ack_immediate = pki->ack_immediate;
@@ -616,10 +616,10 @@ inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk)
 
     skb_queue_reverse_walk(&sk->sk_receive_queue, skb) {
         rcv_cb = HYQUIC_RCV_CB(skb);
-        if (rcv_cb->hyquic_data_type != HYQUIC_DATA_RAW_FRAMES_VAR)
+        if (rcv_cb->hyquic_ctrl_type != HYQUIC_CTRL_RAW_FRAMES_VAR)
             continue;
 
-        rcv_cb->hyquic_data_details.raw_frames_var.ack_timer_started = true;
+        rcv_cb->hyquic_ctrl_details.raw_frames_var.ack_timer_started = true;
         return;
     }
 
@@ -633,10 +633,10 @@ inline void hyquic_frame_var_notify_ack_sent(struct sock *sk)
 
     skb_queue_reverse_walk(&sk->sk_receive_queue, skb) {
         rcv_cb = HYQUIC_RCV_CB(skb);
-        if (rcv_cb->hyquic_data_type != HYQUIC_DATA_RAW_FRAMES_VAR)
+        if (rcv_cb->hyquic_ctrl_type != HYQUIC_CTRL_RAW_FRAMES_VAR)
             continue;
 
-        rcv_cb->hyquic_data_details.raw_frames_var.ack_sent = true;
+        rcv_cb->hyquic_ctrl_details.raw_frames_var.ack_sent = true;
         return;
     }
 
@@ -667,7 +667,7 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
     }
 
     rcv_cb = HYQUIC_RCV_CB(skb);
-    rcv_cb->hyquic_data_type = HYQUIC_DATA_RAW_FRAMES_FIX;
+    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_RAW_FRAMES_FIX;
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);
@@ -687,7 +687,7 @@ int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
     skb_put_data(skb, fskb->data, fskb->len);
 
     rcv_cb = HYQUIC_RCV_CB(skb);
-    rcv_cb->hyquic_data_type = HYQUIC_DATA_LOST_FRAMES;
+    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_LOST_FRAMES;
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);
