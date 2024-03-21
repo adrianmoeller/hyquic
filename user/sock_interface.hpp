@@ -138,8 +138,8 @@ namespace si
     int send_frames(int sockfd, std::list<buffer> &frames)
     {
         buffer buff = assemble_frame_data(frames);
-        char outcmsg[CMSG_SPACE(sizeof(hyquic_data_sendinfo))];
-        hyquic_data_sendinfo *info;
+        char outcmsg[CMSG_SPACE(sizeof(hyquic_ctrlsend_info))];
+        hyquic_ctrlsend_info *info;
         msghdr msg;
         cmsghdr *cmsg;
         iovec iov;
@@ -162,12 +162,10 @@ namespace si
         cmsg->cmsg_len = CMSG_LEN(sizeof(*info));
 
         msg.msg_controllen = cmsg->cmsg_len;
-        info = (hyquic_data_sendinfo*)CMSG_DATA(cmsg);
-        info->type = HYQUIC_DATA_RAW_FRAMES;
+        info = (hyquic_ctrlsend_info*) CMSG_DATA(cmsg);
+        info->type = HYQUIC_CTRL_RAW_FRAMES;
         info->data_length = buff.len;
-        info->raw_frames = (hyquic_data_raw_frames) {
-            .first_frame_seqnum = 0 // TODO needed?
-        };
+        info->raw_frames = (hyquic_ctrl_raw_frames) {};
 
         err = sendmsg(sockfd, &msg, 0);
         if (err < 0)
@@ -175,10 +173,10 @@ namespace si
         return err != buff.len;
     }
 
-    int send_notify_bytes_parsed(int sockfd, const hyquic_data_raw_frames_var_send &content)
+    int send_notify_bytes_parsed(int sockfd, const hyquic_ctrlsend_raw_frames_var &content)
     {
-        char outcmsg[CMSG_SPACE(sizeof(hyquic_data_sendinfo))];
-        hyquic_data_sendinfo *info;
+        char outcmsg[CMSG_SPACE(sizeof(hyquic_ctrlsend_info))];
+        hyquic_ctrlsend_info *info;
         msghdr msg;
         cmsghdr *cmsg;
         iovec iov;
@@ -200,8 +198,8 @@ namespace si
         cmsg->cmsg_len = CMSG_LEN(sizeof(*info));
 
         msg.msg_controllen = cmsg->cmsg_len;
-        info = (hyquic_data_sendinfo*)CMSG_DATA(cmsg);
-        info->type = HYQUIC_DATA_RAW_FRAMES_VAR;
+        info = (hyquic_ctrlsend_info*) CMSG_DATA(cmsg);
+        info->type = HYQUIC_CTRL_RAW_FRAMES_VAR;
         info->data_length = 0;
         info->raw_frames_var = content;
 
@@ -210,12 +208,12 @@ namespace si
 
     struct receive_ops {
         std::function<int(buffer&&, const quic_stream_info&)> recv_stream_data;
-        std::function<int(buffer&&, const hyquic_data_recvinfo&)> recv_hyquic_data;
+        std::function<int(buffer&&, const hyquic_ctrlrecv_info&)> recv_hyquic_ctrl_data;
     };
 
     union hyquic_cmsg_content {
         quic_stream_info stream;
-        hyquic_data_recvinfo hyquic;
+        hyquic_ctrlrecv_info hyquic;
     };
 
     int receive(int sockfd, const receive_ops &recv_ops, size_t len)
@@ -255,8 +253,8 @@ namespace si
                 break;
             }
             if (cursor->cmsg_type == HYQUIC_INFO) {
-                memcpy(&info.hyquic, CMSG_DATA(cursor), sizeof(hyquic_data_recvinfo));
-                err = recv_ops.recv_hyquic_data(std::move(buff), info.hyquic);
+                memcpy(&info.hyquic, CMSG_DATA(cursor), sizeof(hyquic_ctrlrecv_info));
+                err = recv_ops.recv_hyquic_ctrl_data(std::move(buff), info.hyquic);
                 break;
             }
         }

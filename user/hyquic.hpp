@@ -233,11 +233,11 @@ namespace hyquic
         }
 
         struct {
-            hyquic_data_type type;
+            hyquic_ctrl_type type;
             buffer buff;
             buffer_view buff_view;
 
-            inline void init(hyquic_data_type type, uint32_t len)
+            inline void init(hyquic_ctrl_type type, uint32_t len)
             {
                 this->type = type;
                 this->buff = buffer(len);
@@ -246,7 +246,7 @@ namespace hyquic
 
             inline void clear()
             {
-                type = HYQUIC_DATA_NONE;
+                type = HYQUIC_CTRL_NONE;
                 buff = buffer();
             }
 
@@ -260,7 +260,7 @@ namespace hyquic
             .recv_stream_data = [this](buffer&& data, const quic_stream_info& info) {
                 return hyquic::recv_stream_data(std::move(data), info);
             },
-            .recv_hyquic_data = [this](buffer&& data, const hyquic_data_recvinfo& info) {
+            .recv_hyquic_ctrl_data = [this](buffer&& data, const hyquic_ctrlrecv_info& info) {
                 return hyquic::recv_hyquic_data(std::move(data), info);
             }
         };
@@ -272,7 +272,7 @@ namespace hyquic
             return ret;
         }
 
-        inline int recv_hyquic_data(buffer&& data, const hyquic_data_recvinfo& info)
+        inline int recv_hyquic_data(buffer&& data, const hyquic_ctrlrecv_info& info)
         {
             int ret = data.len;
             if (info.incompl) {
@@ -284,14 +284,14 @@ namespace hyquic
             } else {
                 if (hyquic_data_frag.buff.empty()) {
                     boost::asio::post(common_context, [this, mvd_data = std::move(data), type = info.type, details = info.details]() {
-                        hyquic::handle_hyquic_data(mvd_data, type, details);
+                        hyquic::handle_hyquic_ctrl_data(mvd_data, type, details);
                     });
                 } else {
                     assert(hyquic_data_frag.type == info.type);
                     hyquic_data_frag.buff_view.push_buff_into(std::move(data));
                     assert(hyquic_data_frag.buff_view.end());
                     boost::asio::post(common_context, [this, mvd_data = std::move(hyquic_data_frag.buff), type = info.type, details = info.details]() {
-                        hyquic::handle_hyquic_data(mvd_data, type, details);
+                        hyquic::handle_hyquic_ctrl_data(mvd_data, type, details);
                     });
                     hyquic_data_frag.clear();
                 }
@@ -311,12 +311,12 @@ namespace hyquic
             });
         }
 
-        void handle_hyquic_data(const buffer &buff, hyquic_data_type data_type, const hyquic_data_recvinfo_details &details)
+        void handle_hyquic_ctrl_data(const buffer &buff, hyquic_ctrl_type data_type, const hyquic_ctrlrecv_info_details &details)
         {
             assert(buff.len);
             switch (data_type)
             {
-            case HYQUIC_DATA_RAW_FRAMES_FIX: {
+            case HYQUIC_CTRL_RAW_FRAMES_FIX: {
                 buffer_view buff_view(buff);
                 uint64_t frame_type;
 
@@ -329,11 +329,11 @@ namespace hyquic
                 }
                 break;
             }
-            case HYQUIC_DATA_RAW_FRAMES_VAR: {
+            case HYQUIC_CTRL_RAW_FRAMES_VAR: {
                 buffer_view buff_view(buff);
                 uint64_t frame_type;
                 uint8_t frame_type_len;
-                hyquic_data_raw_frames_var_send parsing_results = {
+                hyquic_ctrlsend_raw_frames_var parsing_results = {
                     .msg_id = details.raw_frames_var.msg_id,
                     .processed_length = 0,
                     .ack_eliciting = details.raw_frames_var.ack_eliciting,
@@ -369,7 +369,7 @@ namespace hyquic
                     throw network_error("Sending parsed bytes notification failed.", err);
                 break;
             }
-            case HYQUIC_DATA_LOST_FRAMES: {
+            case HYQUIC_CTRL_LOST_FRAMES: {
                 const buffer_view buff_view(buff);
                 buffer_view buff_view_content(buff);
                 uint64_t frame_type;
