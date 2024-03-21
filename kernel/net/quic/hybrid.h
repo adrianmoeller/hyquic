@@ -6,6 +6,14 @@
 #include <linux/skbuff.h>
 #include "hashtable.h"
 
+/**
+ * List entry of a transport parameter.
+ * 
+ * @list: list entry reference
+ * @id: id of transport parameter
+ * @param: encoded transport parameter including id
+ * @length: length of encoded transport parameter
+*/
 struct hyquic_transport_param {
     struct list_head list;
     uint64_t id;
@@ -13,6 +21,20 @@ struct hyquic_transport_param {
     size_t length;
 };
 
+/**
+ * Holds hyquic specific data. Should be part of the quic socket.
+ * 
+ * @enabled: tells if hyquic is enabled
+ * @sk: back reference to quic socket
+ * @options: hyquic options
+ * @transport_params_remote: list of additional transport parameters of remote peer
+ * @transport_params_local: list of additional transport parameters of host
+ * @next_ic_msg_id: next message id used for communication between user- and kernel-quic
+ * @usrquic_frames_outqueue: frames from user-quic ready to be sent to peer
+ * @unkwn_frames_fix_inqueue: frames of known length from peer ready to be sent to user-quic
+ * @unkwn_frames_var_deferred: remaining frames of a packet from peer deferred to be processed because of unknown frame length
+ * @frame_details_table: mapping of frame type to frame details
+*/
 struct hyquic_container {
     bool enabled;
     struct sock *sk;
@@ -28,6 +50,12 @@ struct hyquic_container {
     struct quic_hash_table frame_details_table;
 };
 
+/**
+ * Frame details container.
+ * 
+ * @details: frame details
+ * @format_specification: frame format specification (length stored in @details)
+*/
 struct hyquic_frame_details_cont {
     struct hyquic_frame_details details;
     uint8_t *format_specification;
@@ -35,12 +63,24 @@ struct hyquic_frame_details_cont {
 
 #define hyquic_transport_param_for_each(pos, head) list_for_each_entry((pos), (head), list)
 
+/**
+ * Control buffer content of to be sent frames.
+ * 
+ * @common: control buffer content of quic
+*/
 struct hyquic_snd_cb {
     struct quic_snd_cb common;
 };
 
 #define HYQUIC_SND_CB(__skb) ((struct hyquic_snd_cb *)&((__skb)->cb[0]))
 
+/**
+ * Control buffer content of received frames.
+ * 
+ * @common: control buffer content of quic
+ * @hyquic_ctrl_type: type of hyquic control data
+ * @hyquic_ctrl_details: details of hyquic control data
+*/
 struct hyquic_rcv_cb {
     struct quic_rcv_cb common;
 	uint8_t hyquic_ctrl_type;

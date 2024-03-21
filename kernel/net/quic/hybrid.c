@@ -18,6 +18,9 @@ struct hyquic_frame_details_entry {
     struct hyquic_frame_details_cont cont;
 };
 
+/**
+ * Enables hyquic. Is called when user-quic calls a hyquic kernel operation.
+*/
 inline void hyquic_enable(struct sock *sk)
 {
     struct hyquic_container *hyquic = quic_hyquic(sk);
@@ -28,6 +31,9 @@ inline void hyquic_enable(struct sock *sk)
     HQ_PR_DEBUG(sk, "enabled");
 }
 
+/**
+ * Initializes frame details map.
+*/
 static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details_table)
 {
     struct quic_hash_head *head;
@@ -45,6 +51,9 @@ static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details
 	return 0;
 }
 
+/**
+ * Initializes hyquic container.
+*/
 int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
 {
     hyquic->enabled = false;
@@ -65,6 +74,9 @@ int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
     return 0;
 }
 
+/**
+ * Frees frame details map and its content.
+*/
 static void hyquic_frame_details_table_free(struct quic_hash_table *frame_details_table)
 {
     struct quic_hash_head *head;
@@ -84,6 +96,9 @@ static void hyquic_frame_details_table_free(struct quic_hash_table *frame_detail
     kfree(frame_details_table->hash);
 }
 
+/**
+ * Frees a given transport parameter list and its content.
+*/
 static void hyquic_transport_params_free(struct list_head *param_list)
 {
     struct hyquic_transport_param *cursor, *tmp;
@@ -95,6 +110,9 @@ static void hyquic_transport_params_free(struct list_head *param_list)
     }
 }
 
+/**
+ * Frees hyquic container and its content.
+*/
 void hyquic_free(struct hyquic_container *hyquic)
 {
     hyquic_transport_params_free(&hyquic->transport_params_remote);
@@ -108,11 +126,23 @@ void hyquic_free(struct hyquic_container *hyquic)
     HQ_PR_DEBUG(hyquic->sk, "done");
 }
 
+/**
+ * Adds a transport parameter list entry to the given transport parameter list.
+ * 
+ * @param param transport parameter list entry
+ * @param param_list transport parameter list
+*/
 static inline void hyquic_transport_params_add(struct hyquic_transport_param *param, struct list_head *param_list)
 {
     list_add_tail(&param->list, param_list);
 }
 
+/**
+ * Gets the total length of encoded transport parameters in the given transport parameter list.
+ * 
+ * @param param_list transport parameter list
+ * @return total length in bytes
+*/
 static inline uint32_t hyquic_transport_params_total_length(struct list_head *param_list)
 {
     struct hyquic_transport_param *cursor;
@@ -124,9 +154,18 @@ static inline uint32_t hyquic_transport_params_total_length(struct list_head *pa
     return total_length;
 }
 
+/**
+ * Creates and allocates a transport parameter list entry.
+ * 
+ * @param id transport parameter id
+ * @param data encoded transport parameter including id
+ * @param length length of encoded transport parameter
+ * @return pointer to transport parameter list entry
+*/
 static inline struct hyquic_transport_param* hyquic_transport_param_create(uint64_t id, void *data, size_t length)
 {
     struct hyquic_transport_param *param = (struct hyquic_transport_param*) kmalloc(sizeof(struct hyquic_transport_param), GFP_KERNEL);
+
     if (!param)
         return NULL;
     param->id = id;
@@ -135,6 +174,14 @@ static inline struct hyquic_transport_param* hyquic_transport_param_create(uint6
     return param;
 }
 
+/**
+ * Creates a frame details list entry and adds it to the frame details map in the given hyquic container.
+ * 
+ * @param hyquic hyquic container
+ * @param frame_details pointer to frame details
+ * @param format_specification pointer to frame format specification (may point to NULL)
+ * @return negative error code if not successful, otherwise 0
+*/
 static inline int hyquic_frame_details_create(struct hyquic_container *hyquic, struct hyquic_frame_details *frame_details, uint8_t *format_specification)
 {
     struct quic_hash_head *head;
@@ -157,6 +204,13 @@ static inline int hyquic_frame_details_create(struct hyquic_container *hyquic, s
     return 0;
 }
 
+/**
+ * Gets frame details by frame type.
+ * 
+ * @param hyquic hyquic container
+ * @param frame_type frame type
+ * @return pointer to frame details container (may point to NULL if not existent)
+*/
 struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_container *hyquic, uint64_t frame_type)
 {
     struct quic_hash_head *head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_type);
@@ -170,11 +224,25 @@ struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_contain
     return NULL;
 }
 
+/**
+ * Checks if frame type is registered by user-quic and frame details exists.
+ * 
+ * @param hyquic hyquic container
+ * @param frame_type frame type
+ * @return true if frame type is registered
+*/
 inline bool hyquic_is_usrquic_frame(struct hyquic_container *hyquic, uint64_t frame_type)
 {
     return hyquic_frame_details_get(hyquic, frame_type);
 }
 
+/**
+ * Decodes and registers a local transport parameter and associated frame types with frame details communicated by user-quic.
+ * 
+ * @param hyquic hyquic container
+ * @param data encoded data
+ * @param length length of encoded data
+*/
 int hyquic_set_local_transport_parameter(struct hyquic_container *hyquic, void *data, uint32_t length)
 {
     struct hyquic_transport_param *entry;
@@ -219,6 +287,15 @@ int hyquic_set_local_transport_parameter(struct hyquic_container *hyquic, void *
 	return 0;
 }
 
+/**
+ * Gets and encodes transport parameters from remote peer to be transferred to user-quic via socket options.
+ * 
+ * @param hyquic hyquic container
+ * @param len procided buffer length for option value
+ * @param optval pointer to user space option value buffer
+ * @param optlen pointer to actual length of option value
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_get_remote_transport_parameters(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen)
 {
     uint32_t total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
@@ -244,6 +321,16 @@ int hyquic_get_remote_transport_parameters(struct hyquic_container *hyquic, int 
 	return 0;
 }
 
+/**
+ * Gets the total length of transport parameters from remote peer to be transferred to user-quic via socket options.
+ * Used to determine the required buffer size for remote transport parameters.
+ * 
+ * @param hyquic hyquic container
+ * @param len procided buffer length for option value
+ * @param optval pointer to user space option value buffer
+ * @param optlen pointer to actual length of option value
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_get_remote_transport_parameters_length(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen)
 {
     uint32_t total_params_length;
@@ -259,6 +346,15 @@ int hyquic_get_remote_transport_parameters_length(struct hyquic_container *hyqui
 	return 0;
 }
 
+/**
+ * Decodes and adds one transport parameter from remote peer to the remote transport parameters list.
+ * 
+ * @param hyquic hyquic container
+ * @param id transport parameter id
+ * @param pp pointer to buffer position (gets increased by transport parameter)
+ * @param plen pointer to remaining length of buffer (gets decreased by transport parameter length)
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, uint64_t id, uint8_t **pp, uint32_t *plen)
 {
     uint32_t id_length = quic_var_len(id);
@@ -290,6 +386,14 @@ int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, ui
     return 0;
 }
 
+/**
+ * Writes encoded local transport parameters to buffer position.
+ * 
+ * @param hyquic hyquic container
+ * @param pp pointer to buffer position to write to (gets increased by written transport parameter)
+ * @param data start of buffer
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, uint8_t **pp, uint8_t *data)
 {
     struct hyquic_transport_param *cursor;
@@ -307,6 +411,14 @@ int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, 
     return 0;
 }
 
+/**
+ * Creates and allocates frame socket buffer from user-quic frame data.
+ * 
+ * @param sk quic socket
+ * @param data_ptr pointer to buffer position (gets increased by frame data)
+ * @param data_length_ptr remaining buffer length (gets decreased by frame data length)
+ * @return pointer to frame socket buffer
+*/
 static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_ptr, uint32_t *data_length_ptr)
 {
     uint32_t frame_length;
@@ -333,7 +445,16 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
     return skb;
 }
 
-static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_t data_length, struct hyquic_ctrl_raw_frames *info)
+/**
+ * Decodes and queues user-quic frames into send buffer.
+ * 
+ * @param sk quic socket
+ * @param data buffer with encoded user-quic frames
+ * @param data_length length of buffer
+ * @param ctrl_details details of hyquic control data
+ * @return negative error code if not successful, otherwise 0
+*/
+static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_t data_length, struct hyquic_ctrl_raw_frames *ctrl_details)
 {
     struct sk_buff *skb;
 
@@ -356,6 +477,14 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
     return 0;
 }
 
+/**
+ * Continues to parse remaining frames of a deferred packet.
+ * This should be called after user-quic responds with the length information of parsed frames unknown to kernel.
+ * 
+ * @param sk quic socket
+ * @param skb socket buffer with remaining packet payload
+ * @return negative error code if not successful, otherwise 0
+*/
 static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *skb)
 {
     int ret;
@@ -445,68 +574,86 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
     return 0;
 }
 
-static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlsend_raw_frames_var *info)
+/**
+ * Processes the response of user-quic with length information of parsed frames unknown to kernel.
+ * First, finds the deferred packet corresponding to the response.
+ * Then, continues to parse its remaining frames.
+ * 
+ * @param sk quic socket
+ * @param ctrlsend_details details of hyquic control data sent by user-quic
+ * @return negative error code if not successful, otherwise 0
+*/
+static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlsend_raw_frames_var *ctrlsend_details)
 {
     struct sk_buff *cursor, *tmp, *fskb;
     struct sk_buff_head *head;
-    struct hyquic_ctrlrecv_raw_frames_var *details;
+    struct hyquic_ctrlrecv_raw_frames_var *ctrlrecv_details;
     uint8_t level = 0;
     bool found = false;
     int err;
 
-    if (!info->processed_length) {
+    if (!ctrlsend_details->processed_length) {
         HQ_PR_ERR(sk, "processed length must not be zero");
         return -EINVAL;
     }
 
     head = &quic_hyquic(sk)->unkwn_frames_var_deferred;
     skb_queue_walk_safe(head, cursor, tmp) {
-        details = &HYQUIC_RCV_CB(cursor)->hyquic_ctrl_details.raw_frames_var;
-        if (details->msg_id == info->msg_id) {
+        ctrlrecv_details = &HYQUIC_RCV_CB(cursor)->hyquic_ctrl_details.raw_frames_var;
+        if (ctrlrecv_details->msg_id == ctrlsend_details->msg_id) {
             found = true;
             __skb_unlink(cursor, head);
             break;
         }
     }
     if (!found) {
-        HQ_PR_ERR(sk, "cannot find deferred packet payload, msg_id=%llu", info->msg_id);
+        HQ_PR_ERR(sk, "cannot find deferred packet payload, msg_id=%llu", ctrlsend_details->msg_id);
         return -EINVAL;
     }
     
-    skb_pull(cursor, info->processed_length);
-    HQ_PR_DEBUG(sk, "skipped %u bytes parsed by user-quic", info->processed_length);
+    skb_pull(cursor, ctrlsend_details->processed_length);
+    HQ_PR_DEBUG(sk, "skipped %u bytes parsed by user-quic", ctrlsend_details->processed_length);
 
-    if (info->ack_eliciting) {
-        details->ack_eliciting = true;
-        if (info->ack_immediate)
-            details->ack_immediate = true;
+    if (ctrlsend_details->ack_eliciting) {
+        ctrlrecv_details->ack_eliciting = true;
+        if (ctrlsend_details->ack_immediate)
+            ctrlrecv_details->ack_immediate = true;
     }
-    if (info->non_probing)
-        details->non_probing = true;
+    if (ctrlsend_details->non_probing)
+        ctrlrecv_details->non_probing = true;
 
     err = hyquic_continue_processing_frames(sk, cursor);
     if (err)
         return err;
 
-    if (details->ack_eliciting && !details->ack_sent) {
-        if (details->ack_immediate) {
+    if (ctrlrecv_details->ack_eliciting && !ctrlrecv_details->ack_sent) {
+        if (ctrlrecv_details->ack_immediate) {
             fskb = quic_frame_create(sk, QUIC_FRAME_ACK, &level);
             if (!fskb)
                 return -ENOMEM;
-            QUIC_SND_CB(fskb)->path_alt = details->path_alt;
+            QUIC_SND_CB(fskb)->path_alt = ctrlrecv_details->path_alt;
             quic_outq_ctrl_tail(sk, fskb, true);
             quic_timer_stop(sk, QUIC_TIMER_ACK);
-            details->ack_sent = true;
-        } else if (!details->ack_timer_started) {
+            ctrlrecv_details->ack_sent = true;
+        } else if (!ctrlrecv_details->ack_timer_started) {
             quic_timer_start(sk, QUIC_TIMER_ACK);
-            details->ack_timer_started = true;
+            ctrlrecv_details->ack_timer_started = true;
         }
     }
 
-    HQ_PR_DEBUG(sk, "done, msg_id=%llu", info->msg_id);
+    HQ_PR_DEBUG(sk, "done, msg_id=%llu", ctrlsend_details->msg_id);
     return 0;
 }
 
+/**
+ * Processes any hyquic control data received by user-quic.
+ * Currently, these are either frames to send or a response to unknown frame length.
+ * 
+ * @param sk quic socket
+ * @param msg_iter pointer to the message iterator holding hyquic control data payload
+ * @param info information to hyquic control data
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_ctrlsend_info *info)
 {
     int err = 0;
@@ -542,6 +689,20 @@ out:
     return err;
 }
 
+/**
+ * Handles a frame unknown to kernel-quic but registered by user-quic.
+ * If user-quic provided a frame format specification, the frame is parsed by kernel-quic and forwarded to user-quic.
+ * Otherwise, the remaining packet payload is sent to user-quic, which has to parse the frame and responds to kernel-quic 
+ * with the parsed length, so that kernel-quic can continue oarsing the packet payload.
+ * 
+ * @param sk quic socket
+ * @param skb socket buffer with remaining packet payload
+ * @param pki quic specific packet information
+ * @param remaining_pack_len length of remaining packed payload
+ * @param frame_details_cont frame details container of upcoming frame
+ * @param var_frame_encountered pointer to flag that gets set if a frame without format specification is encountered
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered)
 {
     struct hyquic_frame_details *frame_details = &frame_details_cont->details;
@@ -605,6 +766,11 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
     return ret;
 }
 
+/**
+ * Notifies a deferred packet that the ack timer has been started and does not need to be started anymore if parsed frames would require it later on.
+ * 
+ * @param sk quic socket
+*/
 inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk)
 {
     struct sk_buff *skb;
@@ -622,6 +788,11 @@ inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk)
     HQ_PR_ERR(sk, "no remaining packet in receive queue");
 }
 
+/**
+ * Notifies a deferred packet that an ack has been sent and does not need to be sent anymore if parsed frames would require it later on.
+ * 
+ * @param sk quic socket
+*/
 inline void hyquic_frame_var_notify_ack_sent(struct sock *sk)
 {
     struct sk_buff *skb;
@@ -639,6 +810,12 @@ inline void hyquic_frame_var_notify_ack_sent(struct sock *sk)
     HQ_PR_ERR(sk, "no remaining packet in receive queue");
 }
 
+/**
+ * Collects all frames waiting to be forwarded to user-quic and sends them to the receive queue.
+ * 
+ * @param sk quic socket
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
 {
     struct sk_buff_head *head = &quic_hyquic(sk)->unkwn_frames_fix_inqueue;
@@ -672,6 +849,13 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
     return 0;
 }
 
+/**
+ * Sends a lost frame back to user-quic.
+ * 
+ * @param sk quic socket
+ * @param fskb socket buffer containing lost frame
+ * @return negative error code if not successful, otherwise 0
+*/
 int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
 {
     struct sk_buff *skb;
