@@ -116,26 +116,60 @@ namespace si
         return socket_setsockopt(sockfd, HYQUIC_SOCKOPT_TRANSPORT_PARAM, buff.data, buff.len);
     }
 
-    static inline buffer assemble_frame_data(std::list<buffer> &frames)
+    struct frame_to_send_container
+    {
+        buffer frame;
+        hyquic_frame_to_send_metadata metadata;
+
+        frame_to_send_container(
+            buffer &&frame,
+            uint32_t payload_length = 0
+        )
+            : frame(std::move(frame)),
+            metadata{
+                .payload_length = payload_length
+            }
+        {
+        }
+
+        frame_to_send_container(const frame_to_send_container&) = delete;
+        frame_to_send_container& operator=(frame_to_send_container&) = delete;
+
+        frame_to_send_container(frame_to_send_container &&other)
+            : frame(std::move(other.frame)), metadata(other.metadata)
+        {
+            other.metadata = {0};
+        }
+
+        frame_to_send_container& operator=(frame_to_send_container &&other)
+        {
+            std::swap(frame, other.frame);
+            std::swap(metadata, other.metadata);
+            return *this;
+        }
+    };
+
+    static inline buffer assemble_frame_data(std::list<frame_to_send_container> &frames)
     {
         size_t total_frame_data_length = 0;
-        for (const buffer &frame_buff : frames)
-            total_frame_data_length += frame_buff.len;
+        for (const frame_to_send_container &frame_cont : frames)
+            total_frame_data_length += frame_cont.frame.len;
 
-        buffer buff(4 * frames.size() + total_frame_data_length);
+        buffer buff((4 + sizeof(hyquic_frame_to_send_metadata)) * frames.size() + total_frame_data_length);
         buffer_view cursor(buff);
 
         while (!frames.empty()) {
-            buffer frame_buff = std::move(frames.front());
+            frame_to_send_container frame_cont = std::move(frames.front());
             frames.pop_front();
-            cursor.push_int<NATIVE>(frame_buff.len, 4);
-            cursor.push_buff_into(std::move(frame_buff));
+            cursor.push(frame_cont.metadata);
+            cursor.push_int<NATIVE>(frame_cont.frame.len, 4);
+            cursor.push_buff_into(std::move(frame_cont.frame));
         }
 
         return buff;
     }
 
-    int send_frames(int sockfd, std::list<buffer> &frames)
+    int send_frames(int sockfd, std::list<frame_to_send_container> &frames)
     {
         buffer buff = assemble_frame_data(frames);
         char outcmsg[CMSG_SPACE(sizeof(hyquic_ctrlsend_info))];

@@ -129,9 +129,16 @@ namespace hyquic
             return si::socket_getsockopt(sockfd, optname, optval, optlen);
         }
 
-        inline int send_frames(std::list<buffer> &frames)
+        inline int send_frames(std::list<si::frame_to_send_container> &frames)
         {
             return si::send_frames(sockfd, frames);
+        }
+
+        inline int send_one_frame(si::frame_to_send_container &&frame_cont)
+        {
+            std::list<si::frame_to_send_container> frames_to_send;
+            frames_to_send.push_back(std::move(frame_cont));
+            return send_frames(frames_to_send);
         }
 
         inline int send_msg(const stream_data& msg)

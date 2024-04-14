@@ -80,9 +80,7 @@ public:
 
     void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame)
     {
-        std::list<buffer> frames_to_resend;
-        frames_to_resend.push_back(frame.copy(frame.len));
-        BAZ(container.send_frames(frames_to_resend));
+        BAZ(container.send_one_frame(si::frame_to_send_container(frame.copy(frame.len))));
     }
 
     bool is_remote_transport_parameter_available()
@@ -107,13 +105,11 @@ void test_client(int argc, char *argv[])
     client.connect_to_server();
     BOOST_ASSERT(ext.is_remote_transport_parameter_available());
 
-    std::list<buffer> frames_to_send;
     buffer frame_buff(2 + 1);
     buffer_view cursor(frame_buff);
     cursor.push_var(0xb1);
     cursor.push_int<NETWORK>(42, 1);
-    frames_to_send.push_back(std::move(frame_buff));
-    BAZ(client.send_frames(frames_to_send));
+    BAZ(client.send_one_frame(si::frame_to_send_container(std::move(frame_buff))));
 
     std::unique_lock<std::mutex> lk(ext.mut);
     ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.frame_received;});
@@ -144,13 +140,11 @@ void test_server(int argc, char *argv[])
     connection.connect_to_client(argv[4], argv[5]);
     BOOST_ASSERT(ext.is_remote_transport_parameter_available());
 
-    std::list<buffer> frames_to_send;
     buffer frame_buff(2 + 4);
     buffer_view cursor(frame_buff);
     cursor.push_var(0xb2);
     cursor.push_var(39485);
-    frames_to_send.push_back(std::move(frame_buff));
-    BAZ(connection.send_frames(frames_to_send));
+    BAZ(connection.send_one_frame(si::frame_to_send_container(std::move(frame_buff))));
 
     std::unique_lock<std::mutex> lk(ext.mut);
     ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.frame_received;});

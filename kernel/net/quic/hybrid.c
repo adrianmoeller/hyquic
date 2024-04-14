@@ -423,9 +423,12 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
 {
     uint32_t frame_length;
     uint64_t frame_type;
+    struct hyquic_frame_to_send_metadata metadata;
     struct sk_buff *skb;
     struct hyquic_snd_cb *snd_cb;
 
+    hyquic_ic_get_data(data_ptr, (uint8_t*) &metadata, sizeof(struct hyquic_frame_to_send_metadata));
+    *data_length_ptr -= sizeof(struct hyquic_frame_to_send_metadata);
     frame_length = hyquic_ic_get_int(data_ptr, 4);
     *data_length_ptr -= 4;
     if (!frame_length || frame_length > *data_length_ptr)
@@ -440,6 +443,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
     *data_length_ptr -= frame_length;
     snd_cb = HYQUIC_SND_CB(skb);
     snd_cb->common.frame_type = frame_type;
+    snd_cb->common.data_bytes = metadata.payload_length;
 
     HQ_PR_DEBUG(sk, "done, type=%llu, len=%u", frame_type, frame_length);
     return skb;
