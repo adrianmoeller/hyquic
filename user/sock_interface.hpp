@@ -123,11 +123,15 @@ namespace si
 
         frame_to_send_container(
             buffer &&frame,
-            uint32_t payload_length = 0
+            uint32_t payload_length = 0,
+            bool has_stream_info = false,
+            quic_stream_info stream_info = {}
         )
             : frame(std::move(frame)),
             metadata{
-                .payload_length = payload_length
+                .payload_length = payload_length,
+                .has_stream_info = has_stream_info,
+                .stream_info = stream_info
             }
         {
         }

@@ -1,6 +1,8 @@
 #ifndef __uapi_hyquic_h__
 #define __uapi_hyquic_h__
 
+#include "quic.h"
+
 /**
  * Hyquic options configurable by user-quic.
  * 
@@ -95,9 +97,13 @@ struct hyquic_frame_details {
  * Metadata attached to every frame sent by user-quic. Used by kernel-QUIC to properly handle user-frames.
  * 
  * @payload_length: length of payload in bytes contained in a frame. May be 0 if frame is a control frame
+ * @has_stream_info: true if stream information are available, otherwise false
+ * @stream_info: holds optional stream information. May be 0 if frame is not related to a stream (indicated with has_stream_info flag)
 */
 struct hyquic_frame_to_send_metadata {
 	uint32_t payload_length;
+	uint8_t has_stream_info;
+	struct quic_stream_info stream_info;
 };
 
 /**
