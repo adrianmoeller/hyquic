@@ -421,7 +421,6 @@ int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, 
 */
 static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_ptr, uint32_t *data_length_ptr)
 {
-    uint32_t frame_length;
     uint64_t frame_type;
     struct hyquic_frame_to_send_metadata metadata;
     struct sk_buff *skb;
@@ -430,18 +429,15 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
 
     hyquic_ic_get_data(data_ptr, (uint8_t*) &metadata, sizeof(struct hyquic_frame_to_send_metadata));
     *data_length_ptr -= sizeof(struct hyquic_frame_to_send_metadata);
-    frame_length = hyquic_ic_get_int(data_ptr, 4);
-    *data_length_ptr -= 4;
-    if (!frame_length || frame_length > *data_length_ptr)
-        return ERR_PTR(-EINVAL);
+
     quic_peek_var(*data_ptr, &frame_type);
 
-    skb = alloc_skb(frame_length, GFP_ATOMIC);
+    skb = alloc_skb(metadata.frame_length, GFP_ATOMIC);
     if (!skb)
 		return ERR_PTR(-ENOMEM);
-    skb_put_data(skb, *data_ptr, frame_length);
-    *data_ptr += frame_length;
-    *data_length_ptr -= frame_length;
+    skb_put_data(skb, *data_ptr, metadata.frame_length);
+    *data_ptr += metadata.frame_length;
+    *data_length_ptr -= metadata.frame_length;
     snd_cb = HYQUIC_SND_CB(skb);
     snd_cb->common.frame_type = frame_type;
     snd_cb->common.data_bytes = metadata.payload_length;
@@ -452,7 +448,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
         snd_cb->common.stream = stream;
     }
 
-    HQ_PR_DEBUG(sk, "done, type=%llu, len=%u", frame_type, frame_length);
+    HQ_PR_DEBUG(sk, "done, type=%llu, len=%u", frame_type, metadata.frame_length);
     return skb;
 }
 

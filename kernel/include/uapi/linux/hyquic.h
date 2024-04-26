@@ -101,6 +101,7 @@ struct hyquic_frame_details {
  * @stream_info: holds optional stream information. May be 0 if frame is not related to a stream (indicated with has_stream_info flag)
 */
 struct hyquic_frame_to_send_metadata {
+	uint32_t frame_length;
 	uint32_t payload_length;
 	uint8_t has_stream_info;
 	struct quic_stream_info stream_info;

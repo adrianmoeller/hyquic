@@ -129,6 +129,7 @@ namespace si
         )
             : frame(std::move(frame)),
             metadata{
+                .frame_length = this->frame.len,
                 .payload_length = payload_length,
                 .has_stream_info = has_stream_info,
                 .stream_info = stream_info
@@ -157,16 +158,15 @@ namespace si
     {
         size_t total_frame_data_length = 0;
         for (const frame_to_send_container &frame_cont : frames)
-            total_frame_data_length += frame_cont.frame.len;
+            total_frame_data_length += frame_cont.metadata.frame_length;
 
-        buffer buff((4 + sizeof(hyquic_frame_to_send_metadata)) * frames.size() + total_frame_data_length);
+        buffer buff(sizeof(hyquic_frame_to_send_metadata) * frames.size() + total_frame_data_length);
         buffer_view cursor(buff);
 
         while (!frames.empty()) {
             frame_to_send_container frame_cont = std::move(frames.front());
             frames.pop_front();
             cursor.push(frame_cont.metadata);
-            cursor.push_int<NATIVE>(frame_cont.frame.len, 4);
             cursor.push_buff_into(std::move(frame_cont.frame));
         }
 
