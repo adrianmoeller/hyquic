@@ -109,7 +109,7 @@ void quic_outq_dgram_tail(struct sock *sk, struct sk_buff *skb, bool cork);
 void quic_outq_data_tail(struct sock *sk, struct sk_buff *skb, bool cork);
 void quic_outq_ctrl_tail(struct sock *sk, struct sk_buff *skb, bool cork);
 void quic_outq_rtx_tail(struct sock *sk, struct sk_buff *skb);
-void hyquic_outq_raw_tail(struct sock *sk, struct sk_buff *skb, bool cork);
+void hyquic_outq_no_stream_data_tail(struct sock *sk, struct sk_buff *skb, bool cork);
 void quic_outq_flush(struct sock *sk);
 void quic_outq_retransmit(struct sock *sk);
 void quic_outq_retransmit_check(struct sock *sk, u8 level, s64 largest,
