@@ -465,6 +465,8 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
 {
     struct sk_buff *skb;
     struct hyquic_snd_cb *snd_cb;
+    long timeo;
+    int err;
 
     if (!quic_is_established(sk)) {
         HQ_PR_ERR(sk, "cannot send user-quic frames when connection is not established");
@@ -479,14 +481,22 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
         }
 
         snd_cb = HYQUIC_SND_CB(skb);
-        if (snd_cb->common.data_bytes)
+        if (snd_cb->common.data_bytes) {
+            if (sk_stream_wspace(sk) <= 0 || !sk_wmem_schedule(sk, snd_cb->common.data_bytes)) {
+                timeo = sock_sndtimeo(sk, ctrl_details->dont_wait);
+                err = hyquic_wait_for_send(sk, 0, timeo, snd_cb->common.data_bytes);
+                if (err)
+                    return err;
+            }
+
             if (snd_cb->common.stream) {
                 quic_outq_data_tail(sk, skb, true);
             } else {
                 hyquic_outq_no_stream_data_tail(sk, skb, true);
             }
-        else
+        } else {
             quic_outq_ctrl_tail(sk, skb, true);
+        }
     }
     quic_outq_flush(sk);
 

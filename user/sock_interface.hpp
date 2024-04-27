@@ -173,7 +173,7 @@ namespace si
         return buff;
     }
 
-    int send_frames(int sockfd, std::list<frame_to_send_container> &frames)
+    int send_frames(int sockfd, std::list<frame_to_send_container> &frames, bool dont_wait = false)
     {
         buffer buff = assemble_frame_data(frames);
         char outcmsg[CMSG_SPACE(sizeof(hyquic_ctrlsend_info))];
@@ -203,7 +203,9 @@ namespace si
         info = (hyquic_ctrlsend_info*) CMSG_DATA(cmsg);
         info->type = HYQUIC_CTRL_RAW_FRAMES;
         info->data_length = buff.len;
-        info->raw_frames = (hyquic_ctrl_raw_frames) {};
+        info->raw_frames = (hyquic_ctrl_raw_frames) {
+            .dont_wait = dont_wait
+        };
 
         err = sendmsg(sockfd, &msg, 0);
         if (err < 0)

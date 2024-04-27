@@ -305,5 +305,6 @@ bool quic_request_sock_exists(struct sock *sk, union quic_addr *sa, union quic_a
 struct sock *quic_sock_lookup(struct sk_buff *skb, union quic_addr *sa, union quic_addr *da);
 struct quic_request_sock *quic_request_sock_dequeue(struct sock *sk);
 int quic_request_sock_enqueue(struct sock *sk, struct quic_request_sock *req);
+int hyquic_wait_for_send(struct sock *sk, u64 stream_id, long timeo, u32 msg_len);
 
 #endif /* __net_quic_h__ */

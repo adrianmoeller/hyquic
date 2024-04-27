@@ -475,6 +475,11 @@ out:
 	}
 }
 
+int hyquic_wait_for_send(struct sock *sk, u64 stream_id, long timeo, u32 msg_len)
+{
+	return quic_wait_for_send(sk, stream_id, timeo, msg_len);
+}
+
 static struct quic_stream *quic_sock_send_stream(struct sock *sk, struct quic_stream_info *sinfo)
 {
 	u8 type = QUIC_FRAME_STREAMS_BLOCKED_BIDI;

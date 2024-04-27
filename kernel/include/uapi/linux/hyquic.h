@@ -24,7 +24,7 @@ enum hyquic_ctrl_type {
 };
 
 struct hyquic_ctrl_raw_frames {
-	// NO-DATA
+	uint8_t dont_wait:1;
 };
 
 struct hyquic_ctrlsend_raw_frames_var {

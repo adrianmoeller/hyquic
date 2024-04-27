@@ -129,9 +129,9 @@ namespace hyquic
             return si::socket_getsockopt(sockfd, optname, optval, optlen);
         }
 
-        inline int send_frames(std::list<si::frame_to_send_container> &frames)
+        inline int send_frames(std::list<si::frame_to_send_container> &frames, bool dont_wait = false)
         {
-            return si::send_frames(sockfd, frames);
+            return si::send_frames(sockfd, frames, dont_wait);
         }
 
         inline int send_one_frame(si::frame_to_send_container &&frame_cont)
@@ -160,6 +160,11 @@ namespace hyquic
         inline int close()
         {
             return si::socket_close(sockfd);
+        }
+
+        inline boost::asio::thread_pool& get_context()
+        {
+            return common_context;
         }
 
     protected:
