@@ -12,6 +12,12 @@ add_library(hyquic INTERFACE)
 target_include_directories(hyquic INTERFACE .)
 target_link_libraries(hyquic INTERFACE quic)
 
+# EXAMPLES
+
+add_library(examples INTERFACE)
+target_include_directories(examples INTERFACE examples/)
+target_link_libraries(examples INTERFACE hyquic)
+
 # TESTING
 
 include(CTest)
@@ -36,6 +42,11 @@ add_test(ffs_test0 ${SERVER_CLIENT_TEST_RUNNER} -a 0 ffs_test)
 add_test(ffs_test1 ${SERVER_CLIENT_TEST_RUNNER} -a 1 ffs_test)
 add_test(ffs_test2 ${SERVER_CLIENT_TEST_RUNNER} -a 2 ffs_test)
 add_test(ffs_test3 ${SERVER_CLIENT_TEST_RUNNER} -a 3 ffs_test)
+
+# BENCHMARKING
+
+add_executable(bandwidth benchmarks/bandwidth.cpp)
+target_link_libraries(bandwidth PUBLIC examples)
 
 # PACKAGING
 
