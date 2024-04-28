@@ -214,17 +214,23 @@ namespace hyquic
         template<typename T>
         inline void push(const T &data)
         {
-            return push((uint8_t*) &data, sizeof(T));
+            push((uint8_t*) &data, sizeof(T));
+        }
+
+        inline void push_pulled(buffer_view &to_pull_from, uint32_t len)
+        {
+            push(to_pull_from.data, len);
+            to_pull_from.prune(len);
         }
 
         inline void push_buff_into(buffer &&buff)
         {
-            return push(buff.data, buff.len);
+            push(buff.data, buff.len);
         }
 
         inline void push_buff(const buffer &buff)
         {
-            return push(buff.data, buff.len);
+            push(buff.data, buff.len);
         }
 
         inline void push_var(uint64_t val)
@@ -304,6 +310,27 @@ namespace hyquic
         };
     };
 
+    class outsized_buffer_view : public buffer_view
+    {
+    public:
+        outsized_buffer_view(uint8_t *data, uint32_t len)
+            : buffer_view(data, len), base_data(data), base_len(len)
+        {
+        }
+
+        buffer trim()
+        {
+            uint32_t trimmed_len = base_len - len;
+            buffer buff(trimmed_len);
+            memcpy(buff.data, base_data, trimmed_len);
+            return buff;
+        }
+
+    private:
+        uint8_t *base_data;
+        uint32_t base_len;
+    };
+
     template<class T>
     class wait_queue
     {
@@ -353,6 +380,5 @@ namespace hyquic
         std::queue<T> internal_queue;
     };
 } // namespace hyquic
-
 
 #endif // __HYQUIC_BUFFER_HPP__

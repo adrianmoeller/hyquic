@@ -1,3 +1,6 @@
+#ifndef __HYQUIC_STREAM_EXTENSION_HPP__
+#define __HYQUIC_STREAM_EXTENSION_HPP__
+
 #include <list>
 #include <unordered_map>
 #include <mutex>
@@ -6,81 +9,10 @@
 #include <variant>
 #include <memory>
 #include <hyquic.hpp>
+#include "stream_frame_utils.hpp"
 
 namespace hyquic
 {
-    enum class frame_type
-    {
-        RESET_STREAM = 0x04,
-        STOP_SENDING = 0x05,
-        STREAM = 0x08,
-        MAX_DATA = 0x10,
-        MAX_STREAM_DATA = 0x11,
-        MAX_STREAMS_BIDI = 0x12,
-        MAX_STREAMS_UNI = 0x13,
-        DATA_BLOCKED = 0x14,
-        STREAM_DATA_BLOCKED = 0x15,
-        STREAMS_BLOCKED_BIDI = 0x16,
-        STREAMS_BLOCKED_UNI = 0x17
-    };
-
-    enum class stream_type {
-        CLIENT_BI = 0x00,
-        SERVER_BI = 0x01,
-        CLIENT_UNI = 0x02,
-        SERVER_UNI = 0x03
-    };
-
-    enum class send_stream_state
-    {
-        READY,
-        SEND,
-        SENT,
-        RECVD,
-        RESET_SENT,
-        RESET_RECVD
-    };
-
-    enum class recv_stream_state
-    {
-        RECV,
-        SIZE_KNOWN,
-        RECVD,
-        READ,
-        RESET_RECVD,
-        RESET_READ,
-    };
-
-    struct stream
-    {
-        uint64_t id;
-
-        struct {
-            uint64_t max_bytes;
-            uint64_t window;
-            uint64_t bytes;
-            uint64_t offset;
-
-            uint32_t errcode;
-            uint32_t frags;
-            send_stream_state state;
-
-            uint8_t data_blocked;
-        } send;
-
-        struct {
-            uint64_t max_bytes;
-            uint64_t window;
-            uint64_t bytes;
-            uint64_t offset;
-            uint64_t highest;
-
-            uint32_t frags;
-            recv_stream_state state;
-        } recv;
-    };
-
-
     class stream_frame
     {
     private:
@@ -216,9 +148,9 @@ namespace hyquic
             return create_stream(id);
         }
 
-        std::variant<std::shared_ptr<stream>, int> prepare_send_stream(uint64_t id, uint32_t flags)
+        std::variant<std::shared_ptr<stream>, int> prepare_send_stream(uint64_t id, uint32_t flags, std::unique_lock<std::mutex> &lock)
         {
-            frame_type type = frame_type::STREAMS_BLOCKED_BIDI;
+            uint64_t type = frame_type::STREAMS_BLOCKED_BIDI;
 
             auto stream_res = get_stream_send(id, flags);
 
@@ -233,7 +165,19 @@ namespace hyquic
                     return err;
             }
 
-            // TODO
+            // TODO check if crypto is ready to send appl. data
+
+            if (id & QUIC_STREAM_TYPE_UNI_MASK)
+		        type = frame_type::STREAMS_BLOCKED_UNI;
+
+            frames_to_send.push_back(create_frame(type, &id));
+            container.send_frames(frames_to_send);
+
+            send_wait_cv.wait(lock, [this, &id]() {
+                return !stream_id_exceeds(id);
+            });
+
+            return get_stream_send(id, flags);
         }
 
     public:
@@ -265,6 +209,8 @@ namespace hyquic
 
             // TODO
 
+            // TODO notify max streams value changed
+
             return 0;
         }
 
@@ -292,16 +238,26 @@ namespace hyquic
                 }
             }
 
-            auto stream_res = prepare_send_stream(msg.id, msg.flags);
+            auto stream_res = prepare_send_stream(msg.id, msg.flags, lock);
             if (std::holds_alternative<int>(stream_res))
                 return std::get<int>(stream_res);
 
             std::shared_ptr<stream> _stream = std::get<std::shared_ptr<stream>>(stream_res);
 
-            // TODO
+            create_stream_frame_info stream_frame_info{
+                .max_frame_len = container.get_max_payload(),
+                ._stream = _stream,
+                .msg = buffer_view(msg.buff),
+                .flags = msg.flags
+            };
+            while (stream_frame_info.msg.len > 0) {
+                frames_to_send.push_back(create_frame(frame_type::STREAM, &stream_frame_info));
+            }
+            container.send_frames(frames_to_send);
 
-            return -1;
+            return 0;
         }
     };
 } // namespace hyquic
 
+#endif // __HYQUIC_STREAM_EXTENSION_HPP__

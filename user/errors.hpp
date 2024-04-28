@@ -51,6 +51,11 @@ namespace hyquic
     {
         using error::error;
     };
+
+    class internal_error : public error
+    {
+        using error::error;
+    };
 } // namespace hyquic
 
 
