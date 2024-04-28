@@ -78,7 +78,11 @@ namespace hyquic
     {
     public:
         hyquic()
-            : running(false), recv_context(1), common_context(1)
+            : running(false), 
+            recv_context(1), 
+            common_context(1), 
+            max_payload(0), 
+            max_payload_dgram(0)
         {
         }
 
@@ -167,6 +171,16 @@ namespace hyquic
             return common_context;
         }
 
+        const inline uint32_t get_max_payload() const
+        {
+            return max_payload;
+        }
+
+        const inline uint32_t get_max_payload_dgram() const
+        {
+            return max_payload_dgram;
+        }
+
     protected:
         bool running;
         int sockfd;
@@ -188,6 +202,9 @@ namespace hyquic
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
         std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
+
+        uint32_t max_payload;
+        uint32_t max_payload_dgram;
 
         void set_receive_timeout()
         {
@@ -390,6 +407,11 @@ namespace hyquic
                 assert(extension_reg.contains(frame_type));
                 extension &ext = extension_reg.at(frame_type);
                 ext.handle_lost_frame(frame_type, buff_view_content, buff_view);
+                break;
+            }
+            case HYQUIC_CTRL_MSS_UPDATE: {
+                max_payload = details.mss_update.max_payload;
+                max_payload_dgram = details.mss_update.max_payload_dgram;
                 break;
             }
             default:

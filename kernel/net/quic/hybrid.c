@@ -70,6 +70,9 @@ int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
     if (hyquic_frame_details_table_init(&hyquic->frame_details_table))
         return -ENOMEM;
 
+    hyquic->last_max_payload = 0;
+    hyquic->last_max_payload_dgram = 0;
+
     HQ_PR_DEBUG(sk, "done");
     return 0;
 }
@@ -899,6 +902,45 @@ int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);
 
-    HQ_PR_DEBUG(sk, "done, type=%u", QUIC_SND_CB(skb)->frame_type);
+    HQ_PR_DEBUG(sk, "done, type=%u", QUIC_SND_CB(fskb)->frame_type);
+    return 0;
+}
+
+/**
+ * Notifies the user-quic about changed MSS values:
+ * - Maximum payload of a packet
+ * - Maximum payload of a packet for datagrams
+ * 
+ * @param sk quic socket
+ * @param packet packet information
+ * @return negative error code if not successful, otherwise 0
+*/
+int hyquic_handle_mss_update(struct sock *sk, struct quic_packet *packet)
+{
+    uint32_t max_payload = quic_packet_max_payload(packet);
+    uint32_t max_payload_dgram = quic_packet_max_payload_dgram(packet);
+    struct hyquic_container *hyquic = quic_hyquic(sk);
+    struct sk_buff *skb;
+    struct hyquic_rcv_cb *rcv_cb;
+
+    if (max_payload == hyquic->last_max_payload && max_payload_dgram == hyquic->last_max_payload_dgram)
+        return 0;
+
+    hyquic->last_max_payload = max_payload;
+    hyquic->last_max_payload_dgram = max_payload_dgram;
+
+    skb = alloc_skb(0, GFP_ATOMIC);
+    if (!skb)
+        return -ENOMEM;
+    
+    rcv_cb = HYQUIC_RCV_CB(skb);
+    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_MSS_UPDATE;
+    rcv_cb->hyquic_ctrl_details.mss_update.max_payload = max_payload;
+    rcv_cb->hyquic_ctrl_details.mss_update.max_payload_dgram = max_payload_dgram;
+
+    __skb_queue_tail(&sk->sk_receive_queue, skb);
+    sk->sk_data_ready(sk);
+
+    HQ_PR_DEBUG(sk, "done, max_payload=%u, max_payload_dgram=%u", max_payload, max_payload_dgram);
     return 0;
 }

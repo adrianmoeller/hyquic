@@ -684,6 +684,9 @@ void quic_packet_mss_update(struct sock *sk, int mss)
 	if (mss_dgram > mss)
 		mss_dgram = mss;
 	packet->mss[1] = mss_dgram - QUIC_TAG_LEN;
+
+	if (quic_hyquic(sk)->enabled)
+		hyquic_handle_mss_update(sk, packet);
 }
 
 int quic_packet_route(struct sock *sk)

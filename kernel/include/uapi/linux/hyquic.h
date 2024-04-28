@@ -21,6 +21,7 @@ enum hyquic_ctrl_type {
 	HYQUIC_CTRL_RAW_FRAMES_FIX,
 	HYQUIC_CTRL_RAW_FRAMES_VAR,
 	HYQUIC_CTRL_LOST_FRAMES,
+	HYQUIC_CTRL_MSS_UPDATE
 };
 
 struct hyquic_ctrl_raw_frames {
@@ -36,7 +37,7 @@ struct hyquic_ctrlsend_raw_frames_var {
 };
 
 /**
- * Container holding hyquic control meta data for user- to kernel-quic communication
+ * Container holding hyquic control metadata for user- to kernel-quic communication
 */
 struct hyquic_ctrlsend_info {
 	enum hyquic_ctrl_type type;
@@ -57,12 +58,18 @@ struct hyquic_ctrlrecv_raw_frames_var {
 	uint8_t path_alt:1;
 };
 
+struct hyquic_ctrlrecv_mss_update {
+	uint32_t max_payload;
+	uint32_t max_payload_dgram;
+};
+
 union hyquic_ctrlrecv_info_details {
 	struct hyquic_ctrlrecv_raw_frames_var raw_frames_var;
+	struct hyquic_ctrlrecv_mss_update mss_update;
 };
 
 /**
- * Container holding hyquic control meta data for kernel- to user-quic communication
+ * Container holding hyquic control metadata for kernel- to user-quic communication
 */
 struct hyquic_ctrlrecv_info {
 	enum hyquic_ctrl_type type;
