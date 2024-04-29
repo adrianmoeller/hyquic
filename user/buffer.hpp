@@ -116,7 +116,7 @@ namespace hyquic
         inline void prune(uint32_t bytes)
         {
             if (len < bytes)
-                throw buffer_error("Buffer write overflow.");
+                throw buffer_error("Buffer read/write overflow.");
 
             data += bytes;
             len -= bytes;
@@ -135,6 +135,14 @@ namespace hyquic
         inline bool end() const
         {
             return !len;
+        }
+
+        inline buffer pull(uint32_t len)
+        {
+            buffer copied = copy(len);
+            this->data += len;
+            this->len -= len;
+            return copied;
         }
 
         inline uint8_t pull_var(uint64_t &val)

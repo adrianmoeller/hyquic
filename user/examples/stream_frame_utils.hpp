@@ -82,74 +82,185 @@ namespace hyquic
         const uint8_t FIN = 0x01;
         const uint8_t LEN = 0x02;
         const uint8_t OFF = 0x04;
-        const uint8_t MASK = 0x08;
+        const uint64_t MASK = ~0x07;
     };
 
-    static si::frame_to_send_container create_frame_max_streams(uint64_t type, uint64_t *max_streams)
+    struct stream_frame
     {
-        uint8_t tmp[10];
-        outsized_buffer_view frame_builder(tmp, 10);
-
-        frame_builder.push_var(type);
-        frame_builder.push_var((*max_streams >> 2) + 1);
-
-        return si::frame_to_send_container(frame_builder.trim());
-    }
-
-    struct create_stream_frame_info
-    {
-        const uint32_t max_frame_len;
-        const std::shared_ptr<stream> _stream;
-        buffer_view msg;
-        const uint32_t flags;
+        std::shared_ptr<stream> _stream;
+        uint64_t offset;
+        bool fin;
+        buffer payload;
     };
 
-    static si::frame_to_send_container create_frame_stream(uint64_t type, create_stream_frame_info *info)
+    struct stream_frame_to_send_container
     {
-        uint32_t header_len = 1;
-        uint32_t msg_len = info->msg.len;
-        std::shared_ptr<stream> &_stream = info->_stream;
+        si::frame_to_send_container frame_to_send;
+        uint64_t stream_id;
+    };
 
-        header_len += get_var_int_length(_stream->id);
-        if (_stream->send.offset) {
-            type |= stream_bit::OFF;
-            header_len += get_var_int_length(_stream->send.offset);
-        }
-
-        type |= stream_bit::LEN;
-        header_len += get_var_int_length(info->max_frame_len);
-
-        if (msg_len <= info->max_frame_len - header_len) {
-            if (info->flags & QUIC_STREAM_FLAG_FIN)
-                type |= stream_bit::FIN;
-        } else {
-            msg_len = info->max_frame_len - header_len;
-        }
-
-        buffer frame_buff(header_len + msg_len);
-        buffer_view frame_builder(frame_buff);
-
-        frame_builder.push_var(type);
-        frame_builder.push_var(_stream->id);
-        if (type & stream_bit::OFF)
-            frame_builder.push_var(_stream->send.offset);
-        frame_builder.push_var(msg_len);
-        frame_builder.push_pulled(info->msg, msg_len);
-
-        return si::frame_to_send_container(std::move(frame_buff), msg_len);
-    }
-
-    si::frame_to_send_container create_frame(uint64_t type, void *data)
+    class stream_frames_to_send_provider : public si::frames_to_send_provider
     {
-        switch (type)
+    public:
+        std::list<stream_frame_to_send_container> frames;
+
+        size_t total_frames_data_length() const
         {
-        case frame_type::MAX_STREAMS_UNI:
-        case frame_type::MAX_STREAMS_BIDI:
-            return create_frame_max_streams(type, (uint64_t*) data);
-        default:
-            throw internal_error("unsupported frame type");
+            size_t total_frame_data_length = 0;
+            for (const stream_frame_to_send_container &frame_cont : frames)
+                total_frame_data_length += frame_cont.frame_to_send.metadata.frame_length;
+            return total_frame_data_length;
         }
-    }
+
+        size_t size() const
+        {
+            return frames.size();
+        }
+
+        bool empty() const
+        {
+            return frames.empty();
+        }
+
+        si::frame_to_send_container pop()
+        {
+            si::frame_to_send_container frame_cont = std::move(frames.front().frame_to_send);
+            frames.pop_front();
+            return frame_cont;
+        }
+
+        void push(si::frame_to_send_container &&frame, uint64_t stream_id)
+        {
+            frames.push_back({
+                .frame_to_send = std::move(frame),
+                .stream_id = stream_id
+            });
+        }
+    };
+
+    struct stream_manager
+    {
+        bool is_server;
+        std::unordered_map<uint64_t, std::shared_ptr<stream>> streams;
+        struct {
+            uint64_t max_stream_data_bidi_local;
+            uint64_t max_stream_data_bidi_remote;
+            uint64_t max_stream_data_uni;
+            uint64_t max_streams_bidi;
+            uint64_t max_streams_uni;
+            uint64_t streams_bidi;
+            uint64_t streams_uni;
+            uint64_t stream_active;
+        } send;
+        struct {
+            uint64_t max_stream_data_bidi_local;
+            uint64_t max_stream_data_bidi_remote;
+            uint64_t max_stream_data_uni;
+            uint64_t max_streams_bidi;
+            uint64_t max_streams_uni;
+        } recv;
+
+        std::shared_ptr<stream> create_stream(uint64_t id)
+        {
+            std::shared_ptr<stream> new_stream(new stream{0});
+
+            new_stream->id = id;
+            if (id & QUIC_STREAM_TYPE_UNI_MASK) {
+                new_stream->send.window = send.max_stream_data_uni;
+                new_stream->recv.window = recv.max_stream_data_uni;
+                new_stream->send.max_bytes = new_stream->send.window;
+                new_stream->recv.max_bytes = new_stream->recv.window;
+                if (send.streams_uni <= (id >> 2))
+                    send.streams_uni = (id >> 2) + 1;
+            } else {
+                if (send.streams_bidi <= (id >> 2))
+                    send.streams_bidi = (id >> 2) + 1;
+                if (is_server ^ !(id & QUIC_STREAM_TYPE_SERVER_MASK)) {
+                    new_stream->send.window = send.max_stream_data_bidi_remote;
+                    new_stream->recv.window = recv.max_stream_data_bidi_local;
+                } else {
+                    new_stream->send.window = send.max_stream_data_bidi_local;
+                    new_stream->recv.window = recv.max_stream_data_bidi_remote;
+                }
+                new_stream->send.max_bytes = new_stream->send.window;
+                new_stream->recv.max_bytes = new_stream->recv.window;
+            }
+
+            streams.insert({id, new_stream});
+            return new_stream;
+        }
+
+        bool stream_id_exceeds(uint64_t id)
+        {
+            if (id & QUIC_STREAM_TYPE_UNI_MASK) {
+                if ((id >> 2) >= send.max_streams_uni)
+                    return true;
+            } else {
+                if ((id >> 2) >= send.max_streams_bidi)
+                    return true;
+            }
+            return false;
+        }
+
+        err_res<std::shared_ptr<stream>> get_stream_send(uint64_t id, uint32_t flags)
+        {
+            stream_type type = (stream_type) (id & QUIC_STREAM_TYPE_MASK);
+
+            if (is_server) {
+                if (type == stream_type::CLIENT_UNI)
+                    return -EINVAL;
+            } else if (type == stream_type::SERVER_UNI) {
+                return -EINVAL;
+            }
+
+            if (streams.contains(id)) {
+                if (flags & QUIC_STREAM_FLAG_NEW)
+                    return -EINVAL;
+                return streams.at(id);
+            }
+
+            if (!(flags & QUIC_STREAM_FLAG_NEW))
+                return -EINVAL;
+
+            if (is_server) {
+                if (type == stream_type::CLIENT_BI)
+                    return -EINVAL;
+            } else {
+                if (type == stream_type::SERVER_BI)
+                    return -EINVAL;
+            }
+            if (stream_id_exceeds(id))
+                return -EAGAIN;
+
+            send.stream_active = id;
+            return create_stream(id);
+        }
+
+        err_res<std::shared_ptr<stream>> get_stream_recv(uint64_t id)
+        {
+            stream_type type = (stream_type) (id & QUIC_STREAM_TYPE_MASK);
+
+            if (is_server) {
+                if (type == stream_type::SERVER_UNI)
+                    return -EINVAL;
+            } else if (type == stream_type::CLIENT_UNI) {
+                return -EINVAL;
+            }
+
+            if (streams.contains(id))
+                return streams.at(id);
+
+            if (id & QUIC_STREAM_TYPE_UNI_MASK) {
+                if ((id >> 2) >= recv.max_streams_uni)
+                    return -EINVAL;
+            } else {
+                if ((id >> 2) >= recv.max_streams_bidi)
+                    return -EINVAL;
+            }
+
+            return create_stream(id);
+        }
+    };
 } // namespace hyquic
 
 #endif // __HYQUIC_STREAM_FRAME_UTILS_HPP__

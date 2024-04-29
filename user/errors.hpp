@@ -2,9 +2,37 @@
 #define __HYQUIC_ERRORS_HPP__
 
 #include <iostream>
+#include <variant>
 
 namespace hyquic
 {
+    template <typename R>
+    using err_res = std::variant<R, int>;
+
+    template <typename R>
+    inline bool is_err(err_res<R> &res)
+    {
+        return std::holds_alternative<int>(res);
+    }
+
+    template <typename R>
+    inline bool is_val(err_res<R> &res)
+    {
+        return std::holds_alternative<R>(res);
+    }
+
+    template <typename R>
+    inline int get_err(err_res<R> &res)
+    {
+        return std::get<int>(res);
+    }
+
+    template <typename R>
+    inline R get_val(err_res<R> &res)
+    {
+        return std::get<R>(res);
+    }
+
     class error : public std::exception
     {
     public:

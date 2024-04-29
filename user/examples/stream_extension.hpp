@@ -6,184 +6,23 @@
 #include <mutex>
 #include <condition_variable>
 #include <cerrno>
-#include <variant>
 #include <memory>
 #include <hyquic.hpp>
 #include "stream_frame_utils.hpp"
 
 namespace hyquic
 {
-    class stream_frame
-    {
-    private:
-        stream &_stream;
-    public:
-        stream_frame(stream &_stream)
-            : _stream(_stream)
-        {
-
-        }
-
-        ~stream_frame()
-        {
-
-        }
-    };
-
-
     /**
      * This extension substitutes the transmission of STREAM frames and control frames associated with streams.
      * It also manages stream states and reassembling.
     */
     class stream_extension : public extension
     {
-    private:
-        hyquic &container;
-        bool is_server;
-        std::vector<si::frame_details_container> frame_details;
-        std::list<si::frame_to_send_container> frames_to_send;
-
-        std::mutex mutex;
-        std::condition_variable send_wait_cv;
-
-        std::unordered_map<uint64_t, std::shared_ptr<stream>> streams;
-        struct {
-            uint64_t max_stream_data_bidi_local;
-            uint64_t max_stream_data_bidi_remote;
-            uint64_t max_stream_data_uni;
-            uint64_t max_streams_bidi;
-            uint64_t max_streams_uni;
-            uint64_t streams_bidi;
-            uint64_t streams_uni;
-            uint64_t stream_active;
-        } send;
-        struct {
-            uint64_t max_stream_data_bidi_local;
-            uint64_t max_stream_data_bidi_remote;
-            uint64_t max_stream_data_uni;
-            uint64_t max_streams_bidi;
-            uint64_t max_streams_uni;
-        } recv;
-
-        std::list<stream_frame> reassemble_list;
-
-        uint64_t max_bytes;
-        uint64_t window;
-        uint64_t bytes;
-        uint64_t highest;
-
-        std::shared_ptr<stream> create_stream(uint64_t id)
-        {
-            std::shared_ptr<stream> new_stream(new stream{0});
-
-            new_stream->id = id;
-            if (id & QUIC_STREAM_TYPE_UNI_MASK) {
-                new_stream->send.window = send.max_stream_data_uni;
-                new_stream->recv.window = recv.max_stream_data_uni;
-                new_stream->send.max_bytes = new_stream->send.window;
-                new_stream->recv.max_bytes = new_stream->recv.window;
-                if (send.streams_uni <= (id >> 2))
-                    send.streams_uni = (id >> 2) + 1;
-            } else {
-                if (send.streams_bidi <= (id >> 2))
-                    send.streams_bidi = (id >> 2) + 1;
-                if (is_server ^ !(id & QUIC_STREAM_TYPE_SERVER_MASK)) {
-                    new_stream->send.window = send.max_stream_data_bidi_remote;
-                    new_stream->recv.window = recv.max_stream_data_bidi_local;
-                } else {
-                    new_stream->send.window = send.max_stream_data_bidi_local;
-                    new_stream->recv.window = recv.max_stream_data_bidi_remote;
-                }
-                new_stream->send.max_bytes = new_stream->send.window;
-                new_stream->recv.max_bytes = new_stream->recv.window;
-            }
-
-            streams.insert({id, new_stream});
-            return new_stream;
-        }
-
-        bool stream_id_exceeds(uint64_t id)
-        {
-            if (id & QUIC_STREAM_TYPE_UNI_MASK) {
-                if ((id >> 2) >= send.max_streams_uni)
-                    return true;
-            } else {
-                if ((id >> 2) >= send.max_streams_bidi)
-                    return true;
-            }
-            return false;
-        }
-
-        std::variant<std::shared_ptr<stream>, int> get_stream_send(uint64_t id, uint32_t flags)
-        {
-            stream_type type = (stream_type) (id & QUIC_STREAM_TYPE_MASK);
-
-            if (is_server) {
-                if (type == stream_type::CLIENT_UNI)
-                    return -EINVAL;
-            } else if (type == stream_type::SERVER_UNI) {
-                return -EINVAL;
-            }
-
-            if (streams.contains(id)) {
-                if (flags & QUIC_STREAM_FLAG_NEW)
-                    return -EINVAL;
-                return streams.at(id);
-            }
-
-            if (!(flags & QUIC_STREAM_FLAG_NEW))
-                return -EINVAL;
-
-            if (is_server) {
-                if (type == stream_type::CLIENT_BI)
-                    return -EINVAL;
-            } else {
-                if (type == stream_type::SERVER_BI)
-                    return -EINVAL;
-            }
-            if (stream_id_exceeds(id))
-                return -EAGAIN;
-
-            send.stream_active = id;
-            return create_stream(id);
-        }
-
-        std::variant<std::shared_ptr<stream>, int> prepare_send_stream(uint64_t id, uint32_t flags, std::unique_lock<std::mutex> &lock)
-        {
-            uint64_t type = frame_type::STREAMS_BLOCKED_BIDI;
-
-            auto stream_res = get_stream_send(id, flags);
-
-            if (std::holds_alternative<std::shared_ptr<stream>>(stream_res)) {
-                std::shared_ptr<stream> _stream = std::get<std::shared_ptr<stream>>(stream_res);
-                if (_stream->send.state >= send_stream_state::SENT)
-                    return -EINVAL;
-                return _stream;
-            } else {
-                int err = std::get<int>(stream_res);
-                if (err != -EAGAIN)
-                    return err;
-            }
-
-            // TODO check if crypto is ready to send appl. data
-
-            if (id & QUIC_STREAM_TYPE_UNI_MASK)
-		        type = frame_type::STREAMS_BLOCKED_UNI;
-
-            frames_to_send.push_back(create_frame(type, &id));
-            container.send_frames(frames_to_send);
-
-            send_wait_cv.wait(lock, [this, &id]() {
-                return !stream_id_exceeds(id);
-            });
-
-            return get_stream_send(id, flags);
-        }
-
     public:
         stream_extension(hyquic &container, bool is_server)
             : container(container), is_server(is_server)
         {
+            stream_mng.is_server = is_server;
             // TODO declare frame details
         }
 
@@ -205,10 +44,31 @@ namespace hyquic
 
         uint32_t handle_frame(uint64_t type, buffer_view frame_content)
         {
-            std::lock_guard<std::mutex> lock(mutex);
+            if (type & stream_bit::MASK == frame_type::STREAM) {
+                return process_stream_frame(type, frame_content);
+            } else {
+                switch (type)
+                {
+                case frame_type::RESET_STREAM:
+                    return process_reset_stream_frame(type, frame_content);
+                case frame_type::STOP_SENDING:
+                    return process_stop_sending_frame(type, frame_content);
+                case frame_type::MAX_STREAM_DATA:
+                    return process_max_stream_data_frame(type, frame_content);
+                case frame_type::MAX_STREAMS_UNI:
+                    return process_max_streams_uni(type, frame_content);
+                case frame_type::MAX_STREAMS_BIDI:
+                    return process_max_streams_bidi(type, frame_content);
+                case frame_type::STREAM_DATA_BLOCKED:
+                    return process_stream_data_blocked(type, frame_content);
+                default:
+                    break;
+                }
+            }
 
             // TODO
 
+            std::lock_guard<std::mutex> lock(mutex);
             // TODO notify max streams value changed
 
             return 0;
@@ -216,46 +76,344 @@ namespace hyquic
 
         void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame)
         {
-            std::lock_guard<std::mutex> lock(mutex);
-
             // TODO
         }
 
         int send_msg(stream_data &msg)
         {
-            std::unique_lock<std::mutex> lock(mutex);
+            auto stream_fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg]() {
+                return prepare_send_stream(msg);
+            }));
 
+            auto stream_res = stream_fut.get();
+            if (is_err(stream_res)) {
+                int err = get_err(stream_res);
+                if (err != -EAGAIN)
+                    return err;
+
+                std::unique_lock<std::mutex> lock(mutex);
+                // TODO add timeout
+                send_wait_cv.wait(lock, [this, &msg]() {
+                    auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg]() {
+                        return !stream_mng.stream_id_exceeds(msg.id);
+                    }));
+                    return fut.get();
+                });
+            }
+
+            auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg]() {
+                auto stream_res = stream_mng.get_stream_send(msg.id, msg.flags);
+                if (is_err(stream_res))
+                    return get_err(stream_res);
+
+                std::shared_ptr<stream> _stream = get_val(stream_res);
+                buffer_view cursor(msg.buff);
+
+                while (!cursor.end()) {
+                    frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), msg.id);
+                }
+                container.send_frames(frames_to_send);
+
+                return 0;
+            }));
+
+            return fut.get();
+        }
+
+    private:
+        hyquic &container;
+        bool is_server;
+        std::vector<si::frame_details_container> frame_details;
+        stream_frames_to_send_provider frames_to_send;
+
+        std::mutex mutex;
+        std::condition_variable send_wait_cv;
+
+        stream_manager stream_mng;
+
+        std::list<std::shared_ptr<stream_frame>> reassemble_list;
+
+        uint64_t max_bytes;
+        uint64_t window;
+        uint64_t bytes;
+        uint64_t highest;
+
+        si::frame_to_send_container create_max_streams_frame(uint64_t type, uint64_t max_streams)
+        {
+            uint8_t tmp[10];
+            outsized_buffer_view frame_builder(tmp, 10);
+
+            frame_builder.push_var(type);
+            frame_builder.push_var((max_streams >> 2) + 1);
+
+            return si::frame_to_send_container(frame_builder.trim());
+        }
+
+        si::frame_to_send_container create_stream_frame(uint32_t max_frame_len,  std::shared_ptr<stream> _stream, buffer_view &msg, uint32_t flags)
+        {
+            uint64_t type = frame_type::STREAM;
+            uint32_t header_len = 1;
+            uint32_t msg_len = msg.len;
+
+            header_len += get_var_int_length(_stream->id);
+            if (_stream->send.offset) {
+                type |= stream_bit::OFF;
+                header_len += get_var_int_length(_stream->send.offset);
+            }
+
+            type |= stream_bit::LEN;
+            header_len += get_var_int_length(max_frame_len);
+
+            if (msg_len <= max_frame_len - header_len) {
+                if (flags & QUIC_STREAM_FLAG_FIN)
+                    type |= stream_bit::FIN;
+            } else {
+                msg_len = max_frame_len - header_len;
+            }
+
+            buffer frame_buff(header_len + msg_len);
+            buffer_view frame_builder(frame_buff);
+
+            frame_builder.push_var(type);
+            frame_builder.push_var(_stream->id);
+            if (type & stream_bit::OFF)
+                frame_builder.push_var(_stream->send.offset);
+            frame_builder.push_var(msg_len);
+            frame_builder.push_pulled(msg, msg_len);
+
+            return si::frame_to_send_container(std::move(frame_buff), msg_len);
+        }
+
+        si::frame_to_send_container create_reset_stream_frame(std::shared_ptr<stream> _stream, uint64_t err_code)
+        {
+            uint8_t tmp[20];
+            outsized_buffer_view frame_builder(tmp, 20);
+
+            frame_builder.push_var(frame_type::RESET_STREAM);
+            frame_builder.push_var(_stream->id);
+            frame_builder.push_var(err_code);
+            frame_builder.push_var(_stream->send.offset);
+
+            _stream->send.errcode = err_code;
+            if (stream_mng.send.stream_active == _stream->id)
+                stream_mng.send.stream_active = -1;
+
+            return si::frame_to_send_container(frame_builder.trim());
+        }
+
+        si::frame_to_send_container create_max_stream_data_frame(std::shared_ptr<stream> _stream)
+        {
+            uint8_t tmp[10];
+            outsized_buffer_view frame_builder(tmp, 10);
+
+            frame_builder.push_var(frame_type::MAX_STREAM_DATA);
+            frame_builder.push_var(_stream->id);
+            frame_builder.push_var(_stream->recv.max_bytes);
+
+            return si::frame_to_send_container(frame_builder.trim());
+        }
+
+        uint32_t process_stream_frame(uint64_t type, buffer_view &frame_content)
+        {
+            uint32_t start_len = frame_content.len;
+            uint64_t stream_id;
+            uint64_t offset = 0;
+            uint64_t payload_len;
+            
+            frame_content.pull_var(stream_id);
+            if (type & stream_bit::OFF)
+                frame_content.pull_var(offset);
+
+            payload_len = frame_content.len;
+            if (type & stream_bit::LEN) {
+                frame_content.pull_var(payload_len);
+                if (payload_len > frame_content.len)
+                    throw network_error("Malformed stream frame.");
+            }
+
+            auto stream_res = stream_mng.get_stream_recv(stream_id);
+            if (is_err(stream_res))
+                throw network_error("Invalid stream id.", get_err(stream_res));
+
+            std::shared_ptr<stream_frame> _stream_frame(new stream_frame{
+                ._stream = get_val(stream_res),
+                .offset = offset,
+                .fin = (bool) (type & stream_bit::FIN),
+                .payload = frame_content.pull(payload_len)
+            });
+            reassemble_list.push_back(_stream_frame);
+
+            return start_len - frame_content.len;
+        }
+
+        uint32_t process_reset_stream_frame(uint64_t type, buffer_view &frame_content)
+        {
+            uint32_t start_len = frame_content.len;
+            uint64_t stream_id;
+            uint64_t err_code;
+            uint64_t final_size;
+
+            frame_content.pull_var(stream_id);
+            frame_content.pull_var(err_code);
+            frame_content.pull_var(final_size);
+
+            auto stream_res = stream_mng.get_stream_recv(stream_id);
+            if (is_err(stream_res))
+                throw network_error("Invalid stream id.", get_err(stream_res));
+            
+            std::shared_ptr<stream> _stream = get_val(stream_res);
+            reassemble_list.remove_if([&_stream](std::shared_ptr<stream_frame> item) {
+                return item->_stream->id == _stream->id;
+            });
+
+            return start_len - frame_content.len;
+        }
+
+        uint32_t process_stop_sending_frame(uint64_t type, buffer_view &frame_content)
+        {
+            uint32_t start_len = frame_content.len;
+            uint64_t stream_id;
+            uint64_t err_code;
+
+            frame_content.pull_var(stream_id);
+            frame_content.pull_var(err_code);
+
+            auto stream_res = stream_mng.get_stream_send(stream_id, 0);
+            if (is_err(stream_res))
+                throw network_error("Invalid stream id.", get_err(stream_res));
+
+            std::shared_ptr<stream> _stream = get_val(stream_res);
+            si::frame_to_send_container reset_stream_frame = create_reset_stream_frame(_stream, err_code);
+
+            _stream->send.state = send_stream_state::SENT;
+
+            // TODO remove frames with stream ID from retransmit queue (how?)
+
+            frames_to_send.frames.remove_if([&stream_id](stream_frame_to_send_container &frame_to_send) {
+                return frame_to_send.stream_id == stream_id;
+            });
+
+            frames_to_send.push(std::move(reset_stream_frame), stream_id);
+            return start_len - frame_content.len;
+        }
+
+        uint32_t process_max_stream_data_frame(uint64_t type, buffer_view &frame_content)
+        {
+            uint32_t start_len = frame_content.len;
+            uint64_t stream_id;
+            uint64_t max_bytes;
+
+            frame_content.pull_var(stream_id);
+            frame_content.pull_var(max_bytes);
+
+            if (!stream_mng.streams.contains(stream_id))
+                throw network_error("Invalid stream id.");
+
+            std::shared_ptr<stream> _stream = stream_mng.streams.at(stream_id);
+
+            if (max_bytes >= _stream->send.max_bytes)
+                _stream->send.max_bytes = max_bytes;
+
+            return start_len - frame_content.len;
+        }
+
+        uint32_t process_max_streams_uni(uint64_t type, buffer_view &frame_content)
+        {
+            uint32_t start_len = frame_content.len;
+            uint64_t max_streams;
+
+            frame_content.pull_var(max_streams);
+
+            if (max_streams < stream_mng.send.max_streams_uni)
+                return start_len - frame_content.len;
+
+            stream_mng.send.max_streams_uni = max_streams;
+            stream_mng.send.streams_uni = max_streams;
+
+            return start_len - frame_content.len;
+        }
+
+        uint32_t process_max_streams_bidi(uint64_t type, buffer_view &frame_content)
+        {
+            uint32_t start_len = frame_content.len;
+            uint64_t max_streams;
+
+            frame_content.pull_var(max_streams);
+
+            if (max_streams < stream_mng.send.max_streams_bidi)
+                return start_len - frame_content.len;
+
+            stream_mng.send.max_streams_bidi = max_streams;
+            stream_mng.send.streams_bidi = max_streams;
+
+            return start_len - frame_content.len;
+        }
+
+        uint32_t process_stream_data_blocked(uint64_t type, buffer_view &frame_content)
+        {
+            uint32_t start_len = frame_content.len;
+            uint64_t stream_id;
+            uint64_t max_bytes;
+
+            frame_content.pull_var(stream_id);
+            frame_content.pull_var(max_bytes);
+
+            if (!stream_mng.streams.contains(stream_id))
+                throw network_error("Invalid stream id.");
+
+            std::shared_ptr<stream> _stream = stream_mng.streams.at(stream_id);
+            uint32_t window = _stream->recv.window;
+
+            if (false /* TODO is under memory pressure */)
+                window >>= 1;
+
+            uint64_t recv_max_bytes = _stream->recv.max_bytes;
+            _stream->recv.max_bytes = _stream->recv.bytes + window;
+
+            frames_to_send.push(create_max_stream_data_frame(_stream), stream_id);
+
+            return start_len - frame_content.len;
+        }
+
+        std::variant<std::shared_ptr<stream>, int> prepare_send_stream(stream_data &msg)
+        {
             if (msg.id == -1) {
-                if (send.stream_active == -1) {
-                    msg.id = (send.streams_bidi << 2);
+                if (stream_mng.send.stream_active == -1) {
+                    msg.id = (stream_mng.send.streams_bidi << 2);
                     if (msg.flags & QUIC_STREAM_FLAG_UNI) {
-                        msg.id = send.streams_uni << 2;
+                        msg.id = stream_mng.send.streams_uni << 2;
                         msg.id |= QUIC_STREAM_TYPE_UNI_MASK;
                     }
                     msg.id |= is_server;
                 } else {
-                    msg.id = send.stream_active;
+                    msg.id = stream_mng.send.stream_active;
                 }
             }
 
-            auto stream_res = prepare_send_stream(msg.id, msg.flags, lock);
-            if (std::holds_alternative<int>(stream_res))
-                return std::get<int>(stream_res);
+            uint64_t type = frame_type::STREAMS_BLOCKED_BIDI;
 
-            std::shared_ptr<stream> _stream = std::get<std::shared_ptr<stream>>(stream_res);
+            auto stream_res = stream_mng.get_stream_send(msg.id, msg.flags);
 
-            create_stream_frame_info stream_frame_info{
-                .max_frame_len = container.get_max_payload(),
-                ._stream = _stream,
-                .msg = buffer_view(msg.buff),
-                .flags = msg.flags
-            };
-            while (stream_frame_info.msg.len > 0) {
-                frames_to_send.push_back(create_frame(frame_type::STREAM, &stream_frame_info));
+            if (is_val(stream_res)) {
+                std::shared_ptr<stream> _stream = get_val(stream_res);
+                if (_stream->send.state >= send_stream_state::SENT)
+                    return -EINVAL;
+                return _stream;
+            } else {
+                int err = get_err(stream_res);
+                if (err != -EAGAIN)
+                    return err;
             }
+
+            // TODO check if crypto is ready to send appl. data
+
+            if (msg.id & QUIC_STREAM_TYPE_UNI_MASK)
+		        type = frame_type::STREAMS_BLOCKED_UNI;
+
+            frames_to_send.push(create_max_streams_frame(type, msg.id), msg.id);
             container.send_frames(frames_to_send);
 
-            return 0;
+            return -EAGAIN;
         }
     };
 } // namespace hyquic

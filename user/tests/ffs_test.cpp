@@ -149,7 +149,7 @@ private:
 
 void client_send_frame(hyquic_client &client, int test_case)
 {
-    std::list<si::frame_to_send_container> frames_to_send;
+    si::default_frames_to_send_provider frames_to_send;
 
     switch(test_case) {
     case 0: {
@@ -157,7 +157,7 @@ void client_send_frame(hyquic_client &client, int test_case)
         buffer_view cursor(frame_buff);
         cursor.push_var(0xb0);
         cursor.push_var(42);
-        frames_to_send.push_back(si::frame_to_send_container(std::move(frame_buff)));
+        frames_to_send.push(si::frame_to_send_container(std::move(frame_buff)));
         break;
     }
     case 1: {
@@ -166,7 +166,7 @@ void client_send_frame(hyquic_client &client, int test_case)
         cursor.push_var(0xb1);
         cursor.push_int<NETWORK>(42, 4);
         cursor.push_int<NETWORK>(21, 1);
-        frames_to_send.push_back(si::frame_to_send_container(std::move(frame_buff)));
+        frames_to_send.push(si::frame_to_send_container(std::move(frame_buff)));
         break;
     }
     case 2: {
@@ -176,7 +176,7 @@ void client_send_frame(hyquic_client &client, int test_case)
         cursor.push_var(3);
         cursor.push_int<NETWORK>(456, 2);
         cursor.push_int<NETWORK>(789, 4);
-        frames_to_send.push_back(si::frame_to_send_container(std::move(frame_buff)));
+        frames_to_send.push(si::frame_to_send_container(std::move(frame_buff)));
         break;
     }
     case 3: {
@@ -186,7 +186,7 @@ void client_send_frame(hyquic_client &client, int test_case)
         cursor.push_int<NETWORK>(2, 1);
         cursor.push_var(9999);
         cursor.push_var(42);
-        frames_to_send.push_back(si::frame_to_send_container(std::move(frame_buff)));
+        frames_to_send.push(si::frame_to_send_container(std::move(frame_buff)));
         break;
     }
     }

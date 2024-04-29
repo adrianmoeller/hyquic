@@ -154,18 +154,60 @@ namespace si
         }
     };
 
-    static inline buffer assemble_frame_data(std::list<frame_to_send_container> &frames)
+    class frames_to_send_provider
     {
-        size_t total_frame_data_length = 0;
-        for (const frame_to_send_container &frame_cont : frames)
-            total_frame_data_length += frame_cont.metadata.frame_length;
+    public:
+        virtual size_t total_frames_data_length() const = 0;
+        virtual size_t size() const = 0;
+        virtual bool empty() const = 0;
+        virtual frame_to_send_container pop() = 0;
+    };
+
+    class default_frames_to_send_provider : public frames_to_send_provider
+    {
+    public:
+        std::list<frame_to_send_container> frames;
+
+        size_t total_frames_data_length() const
+        {
+            size_t total_frame_data_length = 0;
+            for (const frame_to_send_container &frame_cont : frames)
+                total_frame_data_length += frame_cont.metadata.frame_length;
+            return total_frame_data_length;
+        }
+
+        size_t size() const
+        {
+            return frames.size();
+        }
+
+        bool empty() const
+        {
+            return frames.empty();
+        }
+
+        frame_to_send_container pop()
+        {
+            frame_to_send_container frame_cont = std::move(frames.front());
+            frames.pop_front();
+            return frame_cont;
+        }
+
+        void push(frame_to_send_container &&frame)
+        {
+            frames.push_back(std::move(frame));
+        }
+    };
+
+    static inline buffer assemble_frame_data(frames_to_send_provider &frames)
+    {
+        size_t total_frame_data_length = frames.total_frames_data_length();
 
         buffer buff(sizeof(hyquic_frame_to_send_metadata) * frames.size() + total_frame_data_length);
         buffer_view cursor(buff);
 
         while (!frames.empty()) {
-            frame_to_send_container frame_cont = std::move(frames.front());
-            frames.pop_front();
+            frame_to_send_container frame_cont = frames.pop();
             cursor.push(frame_cont.metadata);
             cursor.push_buff_into(std::move(frame_cont.frame));
         }
@@ -173,7 +215,7 @@ namespace si
         return buff;
     }
 
-    int send_frames(int sockfd, std::list<frame_to_send_container> &frames, bool dont_wait = false)
+    int send_frames(int sockfd, frames_to_send_provider &frames, bool dont_wait = false)
     {
         buffer buff = assemble_frame_data(frames);
         char outcmsg[CMSG_SPACE(sizeof(hyquic_ctrlsend_info))];
