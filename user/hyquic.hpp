@@ -61,6 +61,10 @@ namespace hyquic
         virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
+        void handshake_done()
+        {
+            // NO-OP
+        };
     
     private:
         void set_remote_transport_parameter(buffer &&content)
@@ -190,6 +194,7 @@ namespace hyquic
             running = true;
             set_receive_timeout();
             collect_remote_transport_parameter();
+            notify_extensions_handshake_done();
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
             });
@@ -237,7 +242,7 @@ namespace hyquic
             assert(transport_parameters.len == total_transport_params_length);
 
             buffer_view cursor(transport_parameters);
-            while(!cursor.end()) {
+            while (!cursor.end()) {
                 buffer_view tp_beginning(cursor);
                 uint64_t tp_length = 0;
                 uint8_t var_length;
@@ -259,6 +264,12 @@ namespace hyquic
                 extension &ext = tp_id_to_extension.at(tp_id);
                 ext.set_remote_transport_parameter(tp_beginning.copy(tp_length));
             }
+        }
+
+        void notify_extensions_handshake_done()
+        {
+            for (const auto &entry : extension_reg)
+                entry.second.get().handshake_done();
         }
 
         struct {
