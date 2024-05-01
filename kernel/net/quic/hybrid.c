@@ -58,7 +58,9 @@ int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
 {
     hyquic->enabled = false;
     hyquic->sk = sk;
-    hyquic->options = (struct hyquic_options) {};
+    hyquic->options = (struct hyquic_options) {
+        .usrquic_retransmit = true
+    };
 
     INIT_LIST_HEAD(&hyquic->transport_params_remote);
     INIT_LIST_HEAD(&hyquic->transport_params_local);

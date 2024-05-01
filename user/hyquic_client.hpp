@@ -23,7 +23,7 @@ namespace hyquic
 
         inline void connect_to_server(char *psk_path)
         {
-            int err = quic_client_handshake(sockfd, psk_path, nullptr);
+            int err = handshake_client(psk_path, nullptr);
             if (err)
                 throw network_error("Handshake failed.", err);
 

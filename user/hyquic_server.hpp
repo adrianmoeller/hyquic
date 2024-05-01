@@ -7,7 +7,7 @@ namespace hyquic
     public:
         inline void connect_to_client(char *pkey_path, char *cert_path)
         {
-            int err = quic_server_handshake(sockfd, pkey_path, cert_path);
+            int err = handshake_server(pkey_path, cert_path);
             if (err)
                 throw network_error("Handshake failed.", err);
 

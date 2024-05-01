@@ -132,6 +132,13 @@ namespace hyquic
             return copied;
         }
 
+        inline buffer copy_all() const
+        {
+            buffer copied(len);
+            memcpy(copied.data, data, copied.len);
+            return copied;
+        }
+
         inline bool end() const
         {
             return !len;

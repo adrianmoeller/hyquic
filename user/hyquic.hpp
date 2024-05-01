@@ -61,10 +61,14 @@ namespace hyquic
         virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
+        void before_connection_initiation()
+        {
+            // NO-OP
+        }
         void handshake_done()
         {
             // NO-OP
-        };
+        }
     
     private:
         void set_remote_transport_parameter(buffer &&content)
@@ -200,6 +204,18 @@ namespace hyquic
             });
         }
 
+        inline int handshake_client(char *pkey_file, char *cert_file)
+        {
+            notify_extensions_before_connection_initiation();
+            return quic_client_handshake(sockfd, pkey_file, cert_file);
+        }
+
+        inline int handshake_server(char *pkey_file, char *cert_file)
+        {
+            notify_extensions_before_connection_initiation();
+            return quic_server_handshake(sockfd, pkey_file, cert_file);
+        }
+
     private:
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
@@ -270,6 +286,12 @@ namespace hyquic
         {
             for (const auto &entry : extension_reg)
                 entry.second.get().handshake_done();
+        }
+
+        void notify_extensions_before_connection_initiation()
+        {
+            for (const auto &entry : extension_reg)
+                entry.second.get().before_connection_initiation();
         }
 
         struct {

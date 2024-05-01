@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <cerrno>
 #include <memory>
+#include <algorithm>
 #include <hyquic.hpp>
 #include "stream_frame_utils.hpp"
 
@@ -79,6 +80,17 @@ namespace hyquic
             // TODO
         }
 
+        void before_connection_initiation()
+        {
+            quic_transport_param local_tp = {
+                .remote = false,
+                .max_data = 0x7FFFFFFFFFFFFFFF // effectively disables connection-based flow control
+            };
+            socklen_t local_tp_len = sizeof(local_tp);
+
+            container.set_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &local_tp, local_tp_len);
+        }
+
         void handshake_done()
         {
             quic_transport_param local_tp = { .remote = false };
@@ -146,6 +158,53 @@ namespace hyquic
             return fut.get();
         }
 
+        stream_data recv_msg(uint32_t max_length)
+        {
+            uint8_t tmp[max_length];
+            outsized_buffer_view data_builder(tmp, max_length);
+            std::shared_ptr<stream> current_stream;
+            uint32_t flags = 0;
+
+            if (!started_stream_data.get())
+                started_stream_data = recv_buff.wait_pop();
+
+            do {
+                buffer_view cursor(started_stream_data->payload);
+                current_stream = started_stream_data->_stream;
+
+                uint32_t len_to_copy = std::min(cursor.len, data_builder.len);
+                data_builder.push_pulled(cursor, len_to_copy);
+
+                if (!cursor.end()) {
+                    started_stream_data_offset = started_stream_data->payload.len - cursor.len;
+                    break;
+                }
+
+                started_stream_data_offset = 0;
+
+                if (started_stream_data->fin) {
+                    boost::asio::post(container.get_context(), [_stream = started_stream_data->_stream]() {
+                        _stream->recv.state = recv_stream_state::READ;
+                    });
+                    started_stream_data = std::shared_ptr<stream_frame>();
+                    flags |= QUIC_STREAM_FLAG_FIN;
+                    break;
+                }
+
+                started_stream_data = recv_buff.wait_pop();
+                if (current_stream->id != started_stream_data->_stream->id)
+                    break;
+            } while (!data_builder.end());
+
+            buffer recv_buff = data_builder.trim();
+
+            boost::asio::post(container.get_context(), [this, current_stream, recv_len = recv_buff.len]() {
+                handle_recv_flow_control(current_stream, recv_len);
+            });
+
+            return stream_data(current_stream->id, flags, std::move(recv_buff));
+        }
+
     private:
         hyquic &container;
         bool is_server;
@@ -157,6 +216,10 @@ namespace hyquic
 
         stream_manager stream_mng;
         std::list<std::shared_ptr<stream_frame>> reassemble_list;
+        wait_queue<std::shared_ptr<stream_frame>> recv_buff;
+
+        std::shared_ptr<stream_frame> started_stream_data;
+        uint32_t started_stream_data_offset;
 
         si::frame_to_send_container create_max_streams_frame(uint64_t type, uint64_t max_streams)
         {
@@ -476,8 +539,6 @@ namespace hyquic
 
         void do_reassembling(std::shared_ptr<stream_frame> frame)
         {
-            // TODO omitted flow control validation (see comments below)
-
             std::shared_ptr<stream> _stream = frame->_stream;
             uint32_t payload_len = frame->payload.len;
             uint64_t current_highest = 0;
@@ -489,8 +550,6 @@ namespace hyquic
             current_offset = frame->offset + payload_len;
             if (current_offset > _stream->recv.highest) {
                 current_highest = current_offset - _stream->recv.highest;
-                // if (inq->highest + highest > inq->max_bytes || stream->recv.highest + highest > stream->recv.max_bytes)
-                //     return -ENOBUFS;
             }
 
             if (_stream->recv.offset < frame->offset) {
@@ -510,12 +569,10 @@ namespace hyquic
 
                 reassemble_list.push_front(frame);
                 _stream->recv.frags++;
-                // inq->highest += highest;
                 _stream->recv.highest += current_highest;
                 return;
             }
 
-            // inq->highest += highest;
             _stream->recv.highest += current_highest;
             append_recv_queue(frame);
             if (!_stream->recv.frags)
@@ -541,7 +598,37 @@ namespace hyquic
 
         void append_recv_queue(std::shared_ptr<stream_frame> frame)
         {
-            // TODO
+            uint64_t overlap = frame->_stream->recv.offset - frame->offset;
+            if (overlap) {
+                buffer_view cursor(frame->payload);
+                cursor.prune(overlap);
+                frame->payload = cursor.copy_all();
+                frame->offset += overlap;
+            }
+
+            if (frame->fin)
+                frame->_stream->recv.state = recv_stream_state::RECVD;
+
+            frame->_stream->recv.offset += frame->payload.len;
+            recv_buff.push(std::move(frame));
+        }
+
+        void handle_recv_flow_control(std::shared_ptr<stream> _stream, uint32_t recv_len)
+        {
+            if (!recv_len)
+		        return;
+
+            _stream->recv.bytes += recv_len;
+
+            if (_stream->recv.max_bytes - _stream->recv.bytes < _stream->recv.window / 2) {
+                uint32_t window = _stream->recv.window;
+                if (false /* TODO is under memory pressure */)
+                    window >>= 1;
+                _stream->recv.max_bytes = _stream->recv.bytes + window;
+                frames_to_send.push(create_max_stream_data_frame(_stream), _stream->id);
+            }
+
+            container.send_frames(frames_to_send);
         }
     };
 } // namespace hyquic
