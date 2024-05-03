@@ -79,7 +79,7 @@ static int quic_outq_flow_control(struct sock *sk, struct sk_buff *skb)
 
 	/* send flow control */
 	stream = QUIC_SND_CB(skb)->stream;
-	if (stream->send.bytes + len > stream->send.max_bytes) {
+	if (stream && stream->send.bytes + len > stream->send.max_bytes) {
 		if (!stream->send.data_blocked) {
 			nskb = quic_frame_create(sk, QUIC_FRAME_STREAM_DATA_BLOCKED, stream);
 			if (nskb)
@@ -108,8 +108,10 @@ static int quic_outq_flow_control(struct sock *sk, struct sk_buff *skb)
 
 	outq->bytes += len;
 	outq->inflight += len;
-	stream->send.frags++;
-	stream->send.bytes += len;
+	if (stream) {
+		stream->send.frags++;
+		stream->send.bytes += len;
+	}
 	return 0;
 }
 

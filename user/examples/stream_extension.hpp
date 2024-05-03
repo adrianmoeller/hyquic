@@ -148,9 +148,9 @@ namespace hyquic
                 buffer_view cursor(msg.buff);
 
                 while (!cursor.end()) {
-                    frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), msg.id);
+                    data_frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), _stream);
                 }
-                container.send_frames(frames_to_send);
+                send_frames();
 
                 return 0;
             }));
@@ -209,7 +209,8 @@ namespace hyquic
         hyquic &container;
         bool is_server;
         std::vector<si::frame_details_container> frame_details;
-        stream_frames_to_send_provider frames_to_send;
+        stream_frames_to_send_provider ctrl_frames_to_send;
+        stream_frames_to_send_provider data_frames_to_send;
 
         std::mutex mutex;
         std::condition_variable send_wait_cv;
@@ -264,6 +265,15 @@ namespace hyquic
             frame_builder.push_var(msg_len);
             frame_builder.push_pulled(msg, msg_len);
 
+            if (_stream->send.state == send_stream_state::READY)
+                _stream->send.state = send_stream_state::SEND;
+
+            if (type & stream_bit::FIN && _stream->send.state == send_stream_state::SEND) {
+                if (stream_mng.send.stream_active == _stream->id)
+                    stream_mng.send.stream_active = -1;
+                _stream->send.state = send_stream_state::SENT;
+            }
+
             return si::frame_to_send_container(std::move(frame_buff), msg_len);
         }
 
@@ -292,6 +302,18 @@ namespace hyquic
             frame_builder.push_var(frame_type::MAX_STREAM_DATA);
             frame_builder.push_var(_stream->id);
             frame_builder.push_var(_stream->recv.max_bytes);
+
+            return si::frame_to_send_container(frame_builder.trim());
+        }
+
+        si::frame_to_send_container create_stream_data_blocked_frame(std::shared_ptr<stream> _stream)
+        {
+            uint8_t tmp[10];
+            outsized_buffer_view frame_builder(tmp, 10);
+
+            frame_builder.push_var(frame_type::STREAM_DATA_BLOCKED);
+            frame_builder.push_var(_stream->id);
+            frame_builder.push_var(_stream->send.max_bytes);
 
             return si::frame_to_send_container(frame_builder.trim());
         }
@@ -345,6 +367,7 @@ namespace hyquic
                 throw network_error("Invalid stream id.", get_err(stream_res));
             
             std::shared_ptr<stream> _stream = get_val(stream_res);
+            _stream->recv.state = recv_stream_state::RESET_RECVD;
             reassemble_list.remove_if([&_stream](std::shared_ptr<stream_frame> item) {
                 return item->_stream->id == _stream->id;
             });
@@ -368,15 +391,15 @@ namespace hyquic
             std::shared_ptr<stream> _stream = get_val(stream_res);
             si::frame_to_send_container reset_stream_frame = create_reset_stream_frame(_stream, err_code);
 
-            _stream->send.state = send_stream_state::SENT;
+            _stream->send.state = send_stream_state::RESET_SENT;
 
             // TODO remove frames with stream ID from retransmit queue (how?)
 
-            frames_to_send.frames.remove_if([&stream_id](stream_frame_to_send_container &frame_to_send) {
-                return frame_to_send.stream_id == stream_id;
+            data_frames_to_send.frames.remove_if([&stream_id](stream_frame_to_send_container &frame_to_send) {
+                return frame_to_send._stream->id == stream_id;
             });
 
-            frames_to_send.push(std::move(reset_stream_frame), stream_id);
+            ctrl_frames_to_send.push(std::move(reset_stream_frame), _stream);
             return start_len - frame_content.len;
         }
 
@@ -459,7 +482,7 @@ namespace hyquic
             uint64_t recv_max_bytes = _stream->recv.max_bytes;
             _stream->recv.max_bytes = _stream->recv.bytes + window;
 
-            frames_to_send.push(create_max_stream_data_frame(_stream), stream_id);
+            ctrl_frames_to_send.push(create_max_stream_data_frame(_stream), _stream);
 
             return start_len - frame_content.len;
         }
@@ -474,7 +497,7 @@ namespace hyquic
             if (max_streams < stream_mng.recv.max_streams_uni)
                 return start_len - frame_content.len;
 
-            frames_to_send.push(create_max_streams_frame(frame_type::MAX_STREAMS_UNI, max_streams), 0);
+            ctrl_frames_to_send.push(create_max_streams_frame(frame_type::MAX_STREAMS_UNI, max_streams), 0);
             stream_mng.recv.max_streams_uni = max_streams;
 
             return start_len - frame_content.len;
@@ -490,7 +513,7 @@ namespace hyquic
             if (max_streams < stream_mng.recv.max_streams_bidi)
                 return start_len - frame_content.len;
 
-            frames_to_send.push(create_max_streams_frame(frame_type::MAX_STREAMS_BIDI, max_streams), 0);
+            ctrl_frames_to_send.push(create_max_streams_frame(frame_type::MAX_STREAMS_BIDI, max_streams), 0);
             stream_mng.recv.max_streams_bidi = max_streams;
 
             return start_len - frame_content.len;
@@ -531,8 +554,8 @@ namespace hyquic
             if (msg.id & QUIC_STREAM_TYPE_UNI_MASK)
 		        type = frame_type::STREAMS_BLOCKED_UNI;
 
-            frames_to_send.push(create_max_streams_frame(type, msg.id), 0);
-            container.send_frames(frames_to_send);
+            ctrl_frames_to_send.push(create_max_streams_frame(type, msg.id), 0);
+            send_frames();
 
             return -EAGAIN;
         }
@@ -625,7 +648,38 @@ namespace hyquic
                 if (false /* TODO is under memory pressure */)
                     window >>= 1;
                 _stream->recv.max_bytes = _stream->recv.bytes + window;
-                frames_to_send.push(create_max_stream_data_frame(_stream), _stream->id);
+                ctrl_frames_to_send.push(create_max_stream_data_frame(_stream), _stream);
+            }
+
+            send_frames();
+        }
+
+        bool handle_send_flow_control(stream_frame_to_send_container &frame_to_send, stream_frames_to_send_provider &frames_to_send)
+        {
+            uint32_t payload_len = frame_to_send.frame_to_send.metadata.payload_length;
+            std::shared_ptr<stream> _stream = frame_to_send._stream;
+
+            if (_stream->send.bytes + payload_len > _stream->send.max_bytes) {
+                if (!_stream->send.data_blocked) {
+                    frames_to_send.push(create_stream_data_blocked_frame(_stream), _stream);
+                    _stream->send.data_blocked = 1;
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        void send_frames()
+        {
+            stream_frames_to_send_provider frames_to_send;
+
+            frames_to_send.transfer_all(ctrl_frames_to_send);
+            while (!data_frames_to_send.empty()) {
+                if (handle_send_flow_control(data_frames_to_send.peek(), frames_to_send))
+                    break;
+
+                frames_to_send.transfer_one(data_frames_to_send);
             }
 
             container.send_frames(frames_to_send);

@@ -96,7 +96,7 @@ namespace hyquic
     struct stream_frame_to_send_container
     {
         si::frame_to_send_container frame_to_send;
-        uint64_t stream_id;
+        std::shared_ptr<stream> _stream;
     };
 
     class stream_frames_to_send_provider : public si::frames_to_send_provider
@@ -129,12 +129,28 @@ namespace hyquic
             return frame_cont;
         }
 
-        void push(si::frame_to_send_container &&frame, uint64_t stream_id)
+        void push(si::frame_to_send_container &&frame, std::shared_ptr<stream> _stream)
         {
             frames.push_back({
                 .frame_to_send = std::move(frame),
-                .stream_id = stream_id
+                ._stream = _stream
             });
+        }
+
+        stream_frame_to_send_container& peek()
+        {
+            return frames.front();
+        }
+
+        void transfer_all(stream_frames_to_send_provider &other)
+        {
+            frames.merge(other.frames);
+        }
+
+        void transfer_one(stream_frames_to_send_provider &other)
+        {
+            frames.push_back(std::move(other.frames.front()));
+            other.frames.pop_front();
         }
     };
 
