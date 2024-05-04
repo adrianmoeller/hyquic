@@ -1,5 +1,5 @@
-#ifndef __HYQUIC_STREAM_FRAME_UTILS_HPP__
-#define __HYQUIC_STREAM_FRAME_UTILS_HPP__
+#ifndef __HYQUIC_STREAM_UTILS_HPP__
+#define __HYQUIC_STREAM_UTILS_HPP__
 
 #include <hyquic.hpp>
 
@@ -277,6 +277,297 @@ namespace hyquic
             return create_stream(id);
         }
     };
+
+    si::frame_details_container reset_stream_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x04,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stop_sending_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x05,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_000_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_backfill_component();
+
+        return si::frame_details_container(
+            0x08,
+            false,
+            false,
+            true,
+            false,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_001_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_backfill_component();
+
+        return si::frame_details_container(
+            0x09,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_010_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        uint8_t ref_id = ffs.add_var_int_component(true);
+        ffs.add_mult_const_decl_len_component(ref_id, 1);
+
+        return si::frame_details_container(
+            0x0a,
+            false,
+            false,
+            true,
+            false,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_011_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        uint8_t ref_id = ffs.add_var_int_component(true);
+        ffs.add_mult_const_decl_len_component(ref_id, 1);
+
+        return si::frame_details_container(
+            0x0b,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_100_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_backfill_component();
+
+        return si::frame_details_container(
+            0x0c,
+            false,
+            false,
+            true,
+            false,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_101_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_backfill_component();
+
+        return si::frame_details_container(
+            0x0d,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_110_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+        uint8_t ref_id = ffs.add_var_int_component(true);
+        ffs.add_mult_const_decl_len_component(ref_id, 1);
+
+        return si::frame_details_container(
+            0x0e,
+            false,
+            false,
+            true,
+            false,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_111_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+        uint8_t ref_id = ffs.add_var_int_component(true);
+        ffs.add_mult_const_decl_len_component(ref_id, 1);
+
+        return si::frame_details_container(
+            0x0f,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container max_stream_data_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x11,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container max_streams_uni_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x12,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container max_streams_bidi_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x13,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container stream_data_blocked_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x15,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container streams_blocked_uni_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x16,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    si::frame_details_container streams_blocked_bidi_frame_details()
+    {
+        frame_format_specification_builder ffs;
+        ffs.add_var_int_component();
+
+        return si::frame_details_container(
+            0x17,
+            false,
+            false,
+            true,
+            true,
+            true,
+            ffs.get_specification()
+        );
+    }
+
+    void create_stream_frame_details(std::vector<si::frame_details_container> &frame_details)
+    {
+        frame_details.push_back(reset_stream_frame_details());
+        frame_details.push_back(stop_sending_frame_details());
+        frame_details.push_back(stream_000_frame_details());
+        frame_details.push_back(stream_001_frame_details());
+        frame_details.push_back(stream_010_frame_details());
+        frame_details.push_back(stream_011_frame_details());
+        frame_details.push_back(stream_100_frame_details());
+        frame_details.push_back(stream_101_frame_details());
+        frame_details.push_back(stream_110_frame_details());
+        frame_details.push_back(stream_111_frame_details());
+        frame_details.push_back(max_stream_data_frame_details());
+        frame_details.push_back(max_streams_uni_frame_details());
+        frame_details.push_back(max_streams_bidi_frame_details());
+        frame_details.push_back(stream_data_blocked_frame_details());
+        frame_details.push_back(streams_blocked_uni_frame_details());
+        frame_details.push_back(streams_blocked_bidi_frame_details());
+    }
 } // namespace hyquic
 
-#endif // __HYQUIC_STREAM_FRAME_UTILS_HPP__
+#endif // __HYQUIC_STREAM_UTILS_HPP__

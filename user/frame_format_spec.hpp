@@ -76,6 +76,11 @@ namespace hyquic
             components.push_back(std::make_unique<mult_scope_decl_len_component>(scope, declared_length_ref_id));
         }
 
+        void add_backfill_component()
+        {
+            components.push_back(std::make_unique<backfill_component>());
+        }
+
     private:
         struct format_component
         {
@@ -106,7 +111,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT << 6);
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT << 5);
                 target.push_int<NETWORK>(header, 1);
             }
         };
@@ -127,7 +132,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN << 6);
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN << 5);
                 target.push_int<NETWORK>(header, 1);
                 target.push_var(length);
             }
@@ -149,7 +154,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 6);
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 5);
                 target.push_int<NETWORK>(header, 1);
                 target.push_int<NETWORK>(constant, 1);
             }
@@ -171,7 +176,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 6);
+                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 5);
                 target.push_int<NETWORK>(header, 1);
 
                 size_t scope_length = scope.size();
@@ -182,6 +187,24 @@ namespace hyquic
 
                 target.push_int<NETWORK>(scope_length, 1);
                 target.push_buff_into(scope.get_specification());
+            }
+        };
+
+        struct backfill_component : public format_component
+        {
+            backfill_component()
+            {
+            }
+
+            inline size_t size() const
+            {
+                return 1;
+            }
+
+            inline void encode(buffer_view &target) const
+            {
+                uint8_t header = HYQUIC_FRAME_FORMAT_SPEC_COMP_BACKFILL << 5;
+                target.push_int<NETWORK>(header, 1);
             }
         };
 

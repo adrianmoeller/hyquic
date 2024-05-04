@@ -9,7 +9,7 @@
 #include <memory>
 #include <algorithm>
 #include <hyquic.hpp>
-#include "stream_frame_utils.hpp"
+#include "stream_utils.hpp"
 
 namespace hyquic
 {
@@ -24,7 +24,7 @@ namespace hyquic
             : container(container), is_server(is_server)
         {
             stream_mng.is_server = is_server;
-            // TODO declare frame details
+            create_stream_frame_details(frame_details);
         }
 
         inline buffer transport_parameter()
