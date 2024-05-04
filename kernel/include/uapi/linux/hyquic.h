@@ -58,6 +58,11 @@ struct hyquic_ctrlrecv_raw_frames_var {
 	uint8_t path_alt:1;
 };
 
+struct hyquic_ctrlrecv_lost_frames {
+	uint32_t payload_length;
+	uint8_t retransmit_count;
+};
+
 struct hyquic_ctrlrecv_mss_update {
 	uint32_t max_payload;
 	uint32_t max_payload_dgram;
@@ -65,6 +70,7 @@ struct hyquic_ctrlrecv_mss_update {
 
 union hyquic_ctrlrecv_info_details {
 	struct hyquic_ctrlrecv_raw_frames_var raw_frames_var;
+	struct hyquic_ctrlrecv_lost_frames lost_frames;
 	struct hyquic_ctrlrecv_mss_update mss_update;
 };
 
@@ -88,6 +94,8 @@ struct hyquic_ctrlrecv_info {
  * 
  * @frame_type: frame type
  * @format_specification_avail: if 0, frame format specification is not available, otherwise, holds specification length
+ * @copy_incoming: tells if incoming frame should still be processed in kernel-quic while user-quic receives a copy. Note: frame type must be known to kernel-quic
+ * @no_retransmit: tells if frame should never be retransmitted
  * @ack_eliciting: tells if frame is ack-eliciting
  * @ack_immediate: tells if frame should be acked immediatly
  * @non_probing: tells if frame is non-probing
@@ -95,6 +103,8 @@ struct hyquic_ctrlrecv_info {
 struct hyquic_frame_details {
 	uint64_t frame_type;
 	uint16_t format_specification_avail;
+	uint8_t copy_incoming:1;
+	uint8_t no_retransmit:1;
 	uint8_t ack_eliciting:1;
 	uint8_t ack_immediate:1;
 	uint8_t non_probing:1;
@@ -103,13 +113,16 @@ struct hyquic_frame_details {
 /**
  * Metadata attached to every frame sent by user-quic. Used by kernel-QUIC to properly handle user-frames.
  * 
+ * @frame_length: length of frame
  * @payload_length: length of payload in bytes contained in a frame. May be 0 if frame is a control frame
+ * @retransmit_count: number of times frame has been retransmitted. 0 if frame is new
  * @has_stream_info: true if stream information are available, otherwise false
  * @stream_info: holds optional stream information. May be 0 if frame is not related to a stream (indicated with has_stream_info flag)
 */
 struct hyquic_frame_to_send_metadata {
 	uint32_t frame_length;
 	uint32_t payload_length;
+	uint8_t retransmit_count;
 	uint8_t has_stream_info;
 	struct quic_stream_info stream_info;
 };

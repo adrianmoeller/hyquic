@@ -60,7 +60,7 @@ namespace hyquic
         virtual inline buffer transport_parameter() = 0;
         virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
-        virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame) = 0;
+        virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details) = 0;
         void before_connection_initiation()
         {
             // NO-OP
@@ -146,11 +146,11 @@ namespace hyquic
             return si::send_frames(sockfd, frames, dont_wait);
         }
 
-        inline int send_one_frame(si::frame_to_send_container &&frame_cont)
+        inline int send_one_frame(si::frame_to_send_container &&frame_cont, bool dont_wait = false)
         {
             si::default_frames_to_send_provider frames_to_send;
             frames_to_send.push(std::move(frame_cont));
-            return send_frames(frames_to_send);
+            return send_frames(frames_to_send, dont_wait);
         }
 
         inline int send_msg(const stream_data& msg)
@@ -439,7 +439,7 @@ namespace hyquic
                 assert(buff_view_content.pull_var(frame_type));
                 assert(extension_reg.contains(frame_type));
                 extension &ext = extension_reg.at(frame_type);
-                ext.handle_lost_frame(frame_type, buff_view_content, buff_view);
+                ext.handle_lost_frame(frame_type, buff_view_content, buff_view, details.lost_frames);
                 break;
             }
             case HYQUIC_CTRL_MSS_UPDATE: {

@@ -1301,17 +1301,23 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_
 		return -EINVAL;
 
 	while (len > 0) {
+		bool hyquic_process_copy = false;
+
 		type_len = quic_peek_var(skb->data, &type);
 
 		if (quic_hyquic(sk)->enabled) {
 			frame_details_cont = hyquic_frame_details_get(quic_hyquic(sk), type);
 			if (frame_details_cont) {
-				ret = hyquic_process_unkwn_frame(sk, skb, pki, len, frame_details_cont, var_frame_encountered);
-				if (ret < 0)
-					return ret;
-				if (var_frame_encountered)
-					break;
-				goto end_while;
+				if (frame_details_cont->details.copy_incoming) {
+					hyquic_process_copy = true;
+				} else {
+					ret = hyquic_process_unkwn_frame(sk, skb, pki, len, frame_details_cont, var_frame_encountered);
+					if (ret < 0)
+						return ret;
+					if (var_frame_encountered)
+						break;
+					goto end_while;
+				}
 			}
 		}
 
@@ -1339,6 +1345,12 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_
 		}
 		if (quic_frame_non_probing(type))
 			pki->non_probing = 1;
+
+		if (hyquic_process_copy) {
+			ret = hyquic_process_frame_copy(sk, skb, ret, type, type_len);
+			if (ret < 0)
+				return ret;
+		}
 
 	end_while:
 		skb_pull(skb, ret);

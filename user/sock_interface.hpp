@@ -62,6 +62,8 @@ namespace si
 
         frame_details_container(
             uint64_t frame_type,
+            bool copy_incoming,
+            bool no_retransmit,
             bool ack_eliciting,
             bool ack_immediate,
             bool non_probing,
@@ -70,6 +72,8 @@ namespace si
             : frame_details{
                 .frame_type = frame_type,
                 .format_specification_avail = (uint16_t) format_specification.len,
+                .copy_incoming = copy_incoming,
+                .no_retransmit = no_retransmit,
                 .ack_eliciting = ack_eliciting,
                 .ack_immediate = ack_immediate,
                 .non_probing = non_probing
@@ -124,6 +128,7 @@ namespace si
         frame_to_send_container(
             buffer &&frame,
             uint32_t payload_length = 0,
+            uint8_t retransmit_count = 0,
             bool has_stream_info = false,
             quic_stream_info stream_info = {}
         )
@@ -131,6 +136,7 @@ namespace si
             metadata{
                 .frame_length = this->frame.len,
                 .payload_length = payload_length,
+                .retransmit_count = retransmit_count,
                 .has_stream_info = has_stream_info,
                 .stream_info = stream_info
             }

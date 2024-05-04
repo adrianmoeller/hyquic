@@ -24,6 +24,8 @@ public:
     {
         frame_details.push_back(si::frame_details_container(
             0xb1,
+            false,
+            false,
             true,
             false,
             true,
@@ -31,6 +33,8 @@ public:
         ));
         frame_details.push_back(si::frame_details_container(
             0xb2,
+            false,
+            false,
             true,
             true,
             true,
@@ -78,7 +82,7 @@ public:
         return 0;
     }
 
-    void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame)
+    void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details)
     {
         BAZ(container.send_one_frame(si::frame_to_send_container(frame.copy(frame.len))));
     }

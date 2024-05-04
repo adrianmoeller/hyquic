@@ -27,6 +27,8 @@ public:
 
         frame_details.push_back(si::frame_details_container(
             0xb0,
+            false,
+            false,
             true,
             false,
             true,
@@ -38,6 +40,8 @@ public:
 
         frame_details.push_back(si::frame_details_container(
             0xb1,
+            false,
+            false,
             true,
             false,
             true,
@@ -50,6 +54,8 @@ public:
 
         frame_details.push_back(si::frame_details_container(
             0xb2,
+            false,
+            false,
             true,
             false,
             true,
@@ -65,6 +71,8 @@ public:
 
         frame_details.push_back(si::frame_details_container(
             0xb3,
+            false,
+            false,
             true,
             false,
             true,
@@ -133,7 +141,7 @@ public:
         return 0;
     }
 
-    void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame)
+    void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details)
     {
     }
 

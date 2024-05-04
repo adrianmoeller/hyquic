@@ -75,9 +75,27 @@ namespace hyquic
             return 0;
         }
 
-        void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame)
+        void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details)
         {
-            // TODO
+            switch (type)
+            {
+            case frame_type::MAX_STREAMS_UNI:
+            case frame_type::MAX_STREAMS_BIDI:
+                break;
+            default:
+                uint64_t stream_id;
+                frame_content.pull_var(stream_id);
+                auto stream_res = stream_mng.get_stream_send(stream_id, 0);
+                if (is_err(stream_res))
+                    throw network_error("Invalid stream id.", get_err(stream_res));
+                
+                std::shared_ptr<stream> _stream = get_val(stream_res);
+                if (_stream->send.state >= send_stream_state::RESET_SENT)
+                    return;
+                break;
+            }
+
+            container.send_one_frame(si::frame_to_send_container(frame.copy_all(), details.payload_length, details.retransmit_count + 1));
         }
 
         void before_connection_initiation()
@@ -392,8 +410,6 @@ namespace hyquic
             si::frame_to_send_container reset_stream_frame = create_reset_stream_frame(_stream, err_code);
 
             _stream->send.state = send_stream_state::RESET_SENT;
-
-            // TODO remove frames with stream ID from retransmit queue (how?)
 
             data_frames_to_send.frames.remove_if([&stream_id](stream_frame_to_send_container &frame_to_send) {
                 return frame_to_send._stream->id == stream_id;

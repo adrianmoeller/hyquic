@@ -446,6 +446,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
     snd_cb = HYQUIC_SND_CB(skb);
     snd_cb->common.frame_type = frame_type;
     snd_cb->common.data_bytes = metadata.payload_length;
+    snd_cb->common.rtx_count = metadata.retransmit_count;
     if (metadata.has_stream_info) {
         stream = quic_stream_send_get(quic_streams(sk), metadata.stream_info.stream_id, metadata.stream_info.stream_flag, quic_is_serv(sk));
         if (IS_ERR(stream))
@@ -722,10 +723,10 @@ out:
 }
 
 /**
- * Handles a frame unknown to kernel-quic but registered by user-quic.
+ * Handles a frame received from the peer that is unknown to kernel-quic but registered by user-quic.
  * If user-quic provided a frame format specification, the frame is parsed by kernel-quic and forwarded to user-quic.
  * Otherwise, the remaining packet payload is sent to user-quic, which has to parse the frame and responds to kernel-quic 
- * with the parsed length, so that kernel-quic can continue oarsing the packet payload.
+ * with the parsed length, so that kernel-quic can continue parsing the packet payload.
  * 
  * @param sk quic socket
  * @param skb socket buffer with remaining packet payload
@@ -733,7 +734,7 @@ out:
  * @param remaining_pack_len length of remaining packed payload
  * @param frame_details_cont frame details container of upcoming frame
  * @param var_frame_encountered pointer to flag that gets set if a frame without format specification is encountered
- * @return negative error code if not successful, otherwise 0
+ * @return negative error code if not successful, otherwise length of parsed frame
 */
 int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered)
 {
@@ -796,6 +797,36 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         pki->non_probing = 1;
 
     return ret;
+}
+
+/**
+ * Forwards a copy of a frame to user-quic.
+ * This frame was previously parsed and processed by kernel-quic.
+ * 
+ * @param sk quic socket
+ * @param skb socket buffer with remaining packet payload (starting with frame content!)
+ * @param frame_content_len length of frame content
+ * @param frame_type frame type
+ * @param frame_type_len length of frame type
+ * @return negative error code if not successful, otherwise length of frame content
+*/
+int hyquic_process_frame_copy(struct sock *sk, struct sk_buff *skb, uint32_t frame_content_len, uint64_t frame_type, uint8_t frame_type_len)
+{
+    struct sk_buff *fskb;
+    uint8_t *skb_ptr;
+
+    fskb = alloc_skb(frame_type_len + frame_content_len, GFP_ATOMIC);
+        if (!fskb)
+            return -ENOMEM;
+
+    skb_ptr = quic_put_var(fskb->data, frame_type);
+    skb_put(skb, frame_type_len);
+    skb_put_data(fskb, skb->data, frame_content_len);
+
+    __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
+
+    HQ_PR_DEBUG(sk, "forwarding frame copy to user-quic, type=%llu, len=%u", frame_type, frame_type_len + frame_content_len);
+    return frame_content_len;
 }
 
 /**
@@ -900,6 +931,8 @@ int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
 
     rcv_cb = HYQUIC_RCV_CB(skb);
     rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_LOST_FRAMES;
+    rcv_cb->hyquic_ctrl_details.lost_frames.payload_length = QUIC_SND_CB(fskb)->data_bytes;
+    rcv_cb->hyquic_ctrl_details.lost_frames.retransmit_count = QUIC_SND_CB(fskb)->rtx_count;
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);

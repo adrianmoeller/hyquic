@@ -106,6 +106,7 @@ int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, ui
 int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, uint8_t **pp, uint8_t *data);
 int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_ctrlsend_info *info);
 int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered);
+int hyquic_process_frame_copy(struct sock *sk, struct sk_buff *skb, uint32_t frame_content_len, uint64_t frame_type, uint8_t frame_type_len);
 inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk);
 inline void hyquic_frame_var_notify_ack_sent(struct sock *sk);
 int hyquic_flush_unkwn_frames_inqueue(struct sock *sk);

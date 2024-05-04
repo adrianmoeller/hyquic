@@ -144,7 +144,7 @@ namespace hyquic
 
         void transfer_all(stream_frames_to_send_provider &other)
         {
-            frames.merge(other.frames);
+            frames.splice(frames.end(), other.frames);
         }
 
         void transfer_one(stream_frames_to_send_provider &other)

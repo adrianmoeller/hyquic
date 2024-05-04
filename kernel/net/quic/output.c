@@ -394,12 +394,26 @@ next:
 		quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);
 		goto next;
 	}
-	if (hyquic->enabled && hyquic->options.usrquic_retransmit && hyquic_is_usrquic_frame(hyquic, snd_cb->frame_type)) {
-		hyquic_process_lost_frame(sk, skb);
-		outq->inflight -= snd_cb->data_bytes;
-		kfree_skb(skb);
-		quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);
-		goto next;
+	if (hyquic->enabled) {
+		struct hyquic_frame_details_cont *frame_details_cont = hyquic_frame_details_get(hyquic, snd_cb->frame_type);
+		if (frame_details_cont) {
+			if (frame_details_cont->details.no_retransmit) {
+				outq->inflight -= snd_cb->data_bytes;
+				if (snd_cb->data_bytes)
+					quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);
+				kfree_skb(skb);
+				goto next;
+			}
+			if (hyquic->options.usrquic_retransmit) {
+				hyquic_process_lost_frame(sk, skb);
+				outq->inflight -= snd_cb->data_bytes;
+				outq->rtx_count++;
+				if (snd_cb->data_bytes)
+					quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);
+				kfree_skb(skb);
+				goto next;
+			}
+		}
 	}
 
 	quic_packet_config(sk, (snd_cb->level ?: outq->level), snd_cb->path_alt);
