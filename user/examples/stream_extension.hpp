@@ -223,6 +223,68 @@ namespace hyquic
             return stream_data(current_stream->id, flags, std::move(recv_buff));
         }
 
+        template<class Rep, class Period>
+        std::optional<stream_data> recv_msg(uint32_t max_length, const std::chrono::duration<Rep, Period> &timeout)
+        {
+            std::chrono::time_point abs_timeout = std::chrono::steady_clock::now() + timeout;
+
+            uint8_t tmp[max_length];
+            outsized_buffer_view data_builder(tmp, max_length);
+            std::shared_ptr<stream> current_stream;
+            uint32_t flags = 0;
+
+            if (!started_stream_data.get()) {
+                auto opt_stream_data = recv_buff.wait_pop_until(abs_timeout);
+                if (opt_stream_data)
+                    started_stream_data = opt_stream_data.value();
+                else
+                    return std::optional<stream_data>();
+            }
+
+            do {
+                buffer_view cursor(started_stream_data->payload);
+                current_stream = started_stream_data->_stream;
+
+                uint32_t len_to_copy = std::min(cursor.len, data_builder.len);
+                data_builder.push_pulled(cursor, len_to_copy);
+
+                if (!cursor.end()) {
+                    started_stream_data_offset = started_stream_data->payload.len - cursor.len;
+                    break;
+                }
+
+                started_stream_data_offset = 0;
+
+                if (started_stream_data->fin) {
+                    boost::asio::post(container.get_context(), [_stream = started_stream_data->_stream]() {
+                        _stream->recv.state = recv_stream_state::READ;
+                    });
+                    started_stream_data = std::shared_ptr<stream_frame>();
+                    flags |= QUIC_STREAM_FLAG_FIN;
+                    break;
+                }
+
+                auto opt_stream_data = recv_buff.wait_pop_until(abs_timeout);
+                if (opt_stream_data)
+                    started_stream_data = opt_stream_data.value();
+                else if (!started_stream_data.get())
+                    return std::optional<stream_data>();
+                else
+                    break;
+
+                if (current_stream->id != started_stream_data->_stream->id)
+                    break;
+            } while (!data_builder.end());
+
+            buffer recv_buff = data_builder.trim();
+
+            boost::asio::post(container.get_context(), [this, current_stream, recv_len = recv_buff.len]() {
+                handle_recv_flow_control(current_stream, recv_len);
+            });
+
+            return stream_data(current_stream->id, flags, std::move(recv_buff));
+        }
+
     private:
         hyquic &container;
         bool is_server;

@@ -374,10 +374,26 @@ namespace hyquic
         }
 
         template<class Rep, class Period>
-        inline std::optional<T> wait_pop(const std::chrono::duration<Rep, Period> &timeout)
+        inline std::optional<T> wait_pop_for(const std::chrono::duration<Rep, Period> &timeout)
         {
             std::unique_lock<std::mutex> lock(mut);
             bool not_empty = cv.wait_for(lock, timeout, [this]{
+                return !this->internal_queue.empty();
+            });
+            std::optional<T> value;
+            if (not_empty) {
+                value = std::optional<T>(std::move(internal_queue.front()));
+                internal_queue.pop();
+            }
+            lock.unlock();
+            return std::move(value);
+        }
+
+        template<class Clock, class Duration>
+        inline std::optional<T> wait_pop_until(const std::chrono::time_point<Clock, Duration> &timeout)
+        {
+            std::unique_lock<std::mutex> lock(mut);
+            bool not_empty = cv.wait_until(lock, timeout, [this]{
                 return !this->internal_queue.empty();
             });
             std::optional<T> value;

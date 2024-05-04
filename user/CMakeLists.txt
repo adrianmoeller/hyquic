@@ -36,6 +36,9 @@ target_link_libraries(sample_test PUBLIC hyquic)
 add_executable(ffs_test tests/ffs_test.cpp)
 target_link_libraries(ffs_test PUBLIC hyquic)
 
+add_executable(stream_ext_test tests/stream_ext_test.cpp)
+target_link_libraries(stream_ext_test PUBLIC hyquic examples)
+
 add_test(buffer_test buffer_test)
 add_test(sample_test ${SERVER_CLIENT_TEST_RUNNER} sample_test)
 add_test(ffs_test0 ${SERVER_CLIENT_TEST_RUNNER} -a 0 ffs_test)

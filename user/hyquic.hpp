@@ -166,7 +166,7 @@ namespace hyquic
         template<class Rep, class Period>
         inline std::optional<stream_data> receive_msg(const std::chrono::duration<Rep, Period> &timeout)
         {
-            return recv_buff.wait_pop(timeout);
+            return recv_buff.wait_pop_for(timeout);
         }
 
         inline int close()

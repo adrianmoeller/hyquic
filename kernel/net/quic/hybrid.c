@@ -447,6 +447,8 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
     snd_cb->common.frame_type = frame_type;
     snd_cb->common.data_bytes = metadata.payload_length;
     snd_cb->common.rtx_count = metadata.retransmit_count;
+    if (metadata.retransmit_count)
+        quic_outq(sk)->rtx_count++;
     if (metadata.has_stream_info) {
         stream = quic_stream_send_get(quic_streams(sk), metadata.stream_info.stream_id, metadata.stream_info.stream_flag, quic_is_serv(sk));
         if (IS_ERR(stream))

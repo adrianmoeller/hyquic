@@ -22,7 +22,7 @@ namespace hyquic
         RECVD,
         READ,
         RESET_RECVD,
-        RESET_READ,
+        RESET_READ
     };
 
     struct stream

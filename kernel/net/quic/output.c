@@ -407,7 +407,6 @@ next:
 			if (hyquic->options.usrquic_retransmit) {
 				hyquic_process_lost_frame(sk, skb);
 				outq->inflight -= snd_cb->data_bytes;
-				outq->rtx_count++;
 				if (snd_cb->data_bytes)
 					quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);
 				kfree_skb(skb);

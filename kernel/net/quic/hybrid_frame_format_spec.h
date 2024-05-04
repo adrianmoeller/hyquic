@@ -1,7 +1,7 @@
 #ifndef __HYBRID_FRAME_FORMAT_SPEC_H__
 #define __HYBRID_FRAME_FORMAT_SPEC_H__
 
-#define HYQUIC_REF_ID_MAX 63
+#define HYQUIC_REF_ID_MAX 31
 
 struct hyquic_frame_format_spec_cont {
     uint16_t spec_length;
@@ -71,7 +71,7 @@ static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_
     cont->spec_length = spec_length_tmp;
 
     if (ref_id) {
-        if (length_value_len > 4) {
+        if (length_value > 4) {
             HQ_PR_ERR(sk, "invalid specification (declared length too large)");
             return -EINVAL;
         }
@@ -188,11 +188,28 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
     return 0;
 }
 
+static inline int hyquic_parse_backfill_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont)
+{
+    cont->spec_cursor++;
+    cont->spec_length--;
+
+    if (cont->spec_length != 0) {
+        HQ_PR_ERR(sk, "invalid specification (backfill component must be the last component)");
+        return -EINVAL;
+    }
+
+    cont->content_cursor += cont->content_length;
+    cont->content_length = 0;
+
+    HQ_PR_DEBUG(sk, "done");
+    return 0;
+}
+
 static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont)
 {
     uint8_t comp_header = *cont->spec_cursor;
-    uint8_t comp_type = comp_header >> 6;
-    uint8_t comp_ref_id = comp_header & 0x3F;
+    uint8_t comp_type = comp_header >> 5;
+    uint8_t comp_ref_id = comp_header & 0x1F;
 
     switch (comp_type) {
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT:
@@ -203,6 +220,8 @@ static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame
         return hyquic_parse_mult_const_declared_len_component(sk, cont, comp_ref_id);
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_SCOPE_DECL_LEN:
         return hyquic_parse_mult_scope_declared_len_component(sk, cont, comp_ref_id);
+    case HYQUIC_FRAME_FORMAT_SPEC_COMP_BACKFILL:
+        return hyquic_parse_backfill_component(sk, cont);
     default:
         return -EINVAL;
     }
