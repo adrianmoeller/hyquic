@@ -45,6 +45,9 @@ add_test(ffs_test0 ${SERVER_CLIENT_TEST_RUNNER} -a 0 ffs_test)
 add_test(ffs_test1 ${SERVER_CLIENT_TEST_RUNNER} -a 1 ffs_test)
 add_test(ffs_test2 ${SERVER_CLIENT_TEST_RUNNER} -a 2 ffs_test)
 add_test(ffs_test3 ${SERVER_CLIENT_TEST_RUNNER} -a 3 ffs_test)
+add_test(stream_ext_test0 ${SERVER_CLIENT_TEST_RUNNER} -a "ext non" stream_ext_test)
+add_test(stream_ext_test1 ${SERVER_CLIENT_TEST_RUNNER} -a "non ext" stream_ext_test)
+add_test(stream_ext_test2 ${SERVER_CLIENT_TEST_RUNNER} -a "ext ext" stream_ext_test)
 
 # BENCHMARKING
 

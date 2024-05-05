@@ -61,11 +61,11 @@ namespace hyquic
         virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
         virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details) = 0;
-        void before_connection_initiation()
+        virtual void before_connection_initiation()
         {
             // NO-OP
         }
-        void handshake_done()
+        virtual void handshake_done()
         {
             // NO-OP
         }

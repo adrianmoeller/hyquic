@@ -24,6 +24,8 @@ namespace hyquic
             : container(container), is_server(is_server)
         {
             stream_mng.is_server = is_server;
+            stream_mng.send = {};
+            stream_mng.recv = {};
             create_stream_frame_details(frame_details);
         }
 
@@ -43,13 +45,12 @@ namespace hyquic
             return frame_details;
         }
 
-        uint32_t handle_frame(uint64_t type, buffer_view frame_content)
+        uint32_t handle_frame(uint64_t type, buffer_view frame_content) override
         {
-            if (type & stream_bit::MASK == frame_type::STREAM) {
+            if ((type & stream_bit::MASK) == frame_type::STREAM) {
                 return process_stream_frame(type, frame_content);
             } else {
-                switch (type)
-                {
+                switch (type) {
                 case frame_type::RESET_STREAM:
                     return process_reset_stream_frame(type, frame_content);
                 case frame_type::STOP_SENDING:
@@ -67,15 +68,14 @@ namespace hyquic
                 case frame_type::STREAMS_BLOCKED_BIDI:
                     return process_streams_blocked_bidi_frame(type, frame_content);
                 default:
+                    assert(false);
                     break;
                 }
             }
-
-            assert(false);
             return 0;
         }
 
-        void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details)
+        void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details) override
         {
             switch (type)
             {
@@ -98,7 +98,7 @@ namespace hyquic
             container.send_one_frame(si::frame_to_send_container(frame.copy_all(), details.payload_length, details.retransmit_count + 1));
         }
 
-        void before_connection_initiation()
+        void before_connection_initiation() override
         {
             quic_transport_param local_tp = {
                 .remote = false,
@@ -106,15 +106,18 @@ namespace hyquic
             };
             socklen_t local_tp_len = sizeof(local_tp);
 
-            container.set_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &local_tp, local_tp_len);
+            int err = container.set_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &local_tp, local_tp_len);
+            assert(!err);
         }
 
-        void handshake_done()
+        void handshake_done() override
         {
+            int err;
             quic_transport_param local_tp = { .remote = false };
             socklen_t local_tp_len = sizeof(local_tp);
 
-            container.get_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &local_tp, &local_tp_len);
+            err = container.get_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &local_tp, &local_tp_len);
+            assert(!err);
 
             stream_mng.recv.max_stream_data_bidi_local = local_tp.max_stream_data_bidi_local;
             stream_mng.recv.max_stream_data_bidi_remote = local_tp.max_stream_data_bidi_remote;
@@ -125,7 +128,8 @@ namespace hyquic
             quic_transport_param remote_tp = { .remote = true };
             socklen_t remote_tp_len = sizeof(remote_tp);
 
-            container.get_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &remote_tp, &remote_tp_len);
+            err = container.get_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &remote_tp, &remote_tp_len);
+            assert(!err);
 
             stream_mng.send.max_stream_data_bidi_local = remote_tp.max_stream_data_bidi_local;
             stream_mng.send.max_stream_data_bidi_remote = remote_tp.max_stream_data_bidi_remote;
@@ -157,8 +161,9 @@ namespace hyquic
                 });
             }
 
-            auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg]() {
-                auto stream_res = stream_mng.get_stream_send(msg.id, msg.flags);
+            auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg, &stream_res]() {
+                if (is_err(stream_res))
+                    stream_res = stream_mng.get_stream_send(msg.id, msg.flags);
                 if (is_err(stream_res))
                     return get_err(stream_res);
 
@@ -170,7 +175,7 @@ namespace hyquic
                 }
                 send_frames();
 
-                return 0;
+                return (int) msg.buff.len;
             }));
 
             return fut.get();
