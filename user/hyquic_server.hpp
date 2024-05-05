@@ -23,8 +23,8 @@ namespace hyquic
         sockaddr_in addr;
         socklen_t addr_len;
 
-        hyquic_server_connection(int clientfd, sockaddr_in addr, socklen_t addr_len)
-            : addr(addr), addr_len(addr_len)
+        hyquic_server_connection(int clientfd, sockaddr_in addr, socklen_t addr_len, uint32_t recv_from_sock_buff_size = RECV_BUFF_INIT_SIZE)
+            : hyquic(recv_from_sock_buff_size), addr(addr), addr_len(addr_len)
         {
             sockfd = clientfd;
         }
@@ -59,7 +59,7 @@ namespace hyquic
             si::socket_close(listenfd);
         }
 
-        hyquic_server_connection accept_connection()
+        hyquic_server_connection accept_connection(uint32_t recv_from_sock_buff_size = RECV_BUFF_INIT_SIZE)
         {
             socklen_t addr_len = sizeof(sock_addr);
 
@@ -67,7 +67,7 @@ namespace hyquic
             if (sockfd < 0)
                 throw network_error("Socket accept failed.", sockfd);
 
-            return hyquic_server_connection(sockfd, sock_addr, addr_len);
+            return hyquic_server_connection(sockfd, sock_addr, addr_len, recv_from_sock_buff_size);
         }
 
     private:

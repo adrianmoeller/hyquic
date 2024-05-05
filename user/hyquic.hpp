@@ -85,8 +85,8 @@ namespace hyquic
     class hyquic
     {
     public:
-        hyquic()
-            : running(false), 
+        hyquic(uint32_t recv_from_sock_buff_size = RECV_BUFF_INIT_SIZE)
+            : running(false), recv_from_sock_buff_size(recv_from_sock_buff_size), 
             recv_context(1), 
             common_context(1), 
             max_payload(0), 
@@ -220,6 +220,7 @@ namespace hyquic
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
         wait_queue<stream_data> recv_buff;
+        uint32_t recv_from_sock_buff_size;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
         std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
@@ -363,7 +364,7 @@ namespace hyquic
 
         void recv_loop()
         {
-            int err = si::receive(sockfd, recv_ops, RECV_BUFF_INIT_SIZE);
+            int err = si::receive(sockfd, recv_ops, recv_from_sock_buff_size);
             if (err < 0) {
                 if (err != -EAGAIN && err != -EWOULDBLOCK)
                     return;
