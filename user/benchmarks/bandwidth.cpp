@@ -57,10 +57,10 @@ int do_client_stream_ext(int argc, char *argv[])
         return -1;
 
     auto elapsed = std::chrono::steady_clock::now() - start_time;
-    double elapsed_sec = elapsed.count() * 1000 * 1000 * 1000;
-    double total_len_mb = TOTAL_LEN / 1024 / 1024;
+    double elapsed_sec = elapsed.count() / 1000 / 1000 / 1000;
+    double total_len_kb = TOTAL_LEN / 1024;
     
-    std::cout << "Bandwidth: " << total_len_mb / elapsed_sec << " MBytes/sec" << std::endl;
+    std::cout << "Bandwidth: " << total_len_kb / elapsed_sec << " KBytes/sec" << std::endl;
 
     client.close();
 
@@ -112,10 +112,10 @@ int do_client_no_ext(int argc, char *argv[])
         return -1;
 
     auto elapsed = std::chrono::steady_clock::now() - start_time;
-    double elapsed_sec = elapsed.count() * 1000 * 1000 * 1000;
-    double total_len_mb = TOTAL_LEN / 1024 / 1024;
+    double elapsed_sec = elapsed.count() / 1000 / 1000 / 1000;
+    double total_len_kb = TOTAL_LEN / 1024;
 
-    std::cout << "Bandwidth: " << total_len_mb / elapsed_sec << " MBytes/sec" << std::endl;
+    std::cout << "Bandwidth: " << total_len_kb / elapsed_sec << " KBytes/sec" << std::endl;
 
     client.close();
 

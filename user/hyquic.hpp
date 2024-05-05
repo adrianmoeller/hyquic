@@ -86,7 +86,8 @@ namespace hyquic
     {
     public:
         hyquic(uint32_t recv_from_sock_buff_size = RECV_BUFF_INIT_SIZE)
-            : running(false), recv_from_sock_buff_size(recv_from_sock_buff_size), 
+            : running(false),
+            recv_from_sock_buff_size(recv_from_sock_buff_size), 
             recv_context(1), 
             common_context(1), 
             max_payload(0), 
@@ -171,6 +172,7 @@ namespace hyquic
 
         inline int close()
         {
+            running = false;
             return si::socket_close(sockfd);
         }
 
@@ -366,12 +368,23 @@ namespace hyquic
         {
             int err = si::receive(sockfd, recv_ops, recv_from_sock_buff_size);
             if (err < 0) {
-                if (err != -EAGAIN && err != -EWOULDBLOCK)
-                    return;
+                if (err == -EAGAIN || err == -EWOULDBLOCK) {
+                    boost::asio::steady_timer(recv_context, std::chrono::milliseconds(50)).async_wait([this](const auto& e) {
+                        recv_loop();
+                    });
+                } else {
+                    if (!running)
+                        return;
+
+                    boost::asio::post(recv_context, [this]() {
+                        recv_loop();
+                    });
+                }
+            } else {
+                boost::asio::post(recv_context, [this]() {
+                    recv_loop();
+                });
             }
-            boost::asio::post(recv_context, [this]() {
-                recv_loop();
-            });
         }
 
         void handle_hyquic_ctrl_data(const buffer &buff, hyquic_ctrl_type data_type, const hyquic_ctrlrecv_info_details &details)

@@ -960,8 +960,10 @@ int hyquic_handle_mss_update(struct sock *sk, struct quic_packet *packet)
     struct sk_buff *skb;
     struct hyquic_rcv_cb *rcv_cb;
 
-    if (max_payload == hyquic->last_max_payload && max_payload_dgram == hyquic->last_max_payload_dgram)
+    if (max_payload == hyquic->last_max_payload && max_payload_dgram == hyquic->last_max_payload_dgram) {
+        HQ_PR_DEBUG(sk, "no change, max_payload=%u, max_payload_dgram=%u", max_payload, max_payload_dgram);
         return 0;
+    }
 
     hyquic->last_max_payload = max_payload;
     hyquic->last_max_payload_dgram = max_payload_dgram;

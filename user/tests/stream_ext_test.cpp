@@ -81,7 +81,7 @@ void test_server_stream_ext(int argc, char *argv[])
 
     buffer msg_to_send("Hello, HyQUIC client!");
     uint32_t msg_to_send_len = msg_to_send.len;
-    stream_data send_data(1, QUIC_STREAM_FLAG_NEW | QUIC_STREAM_FLAG_FIN, std::move(msg_to_send));
+    stream_data send_data(0, QUIC_STREAM_FLAG_FIN, std::move(msg_to_send));
 
     BCE(ext.send_msg(send_data), msg_to_send_len);
 
@@ -103,7 +103,7 @@ void test_server_no_ext(int argc, char *argv[])
 
     buffer msg_to_send("Hello, HyQUIC client!");
     uint32_t msg_to_send_len = msg_to_send.len;
-    BCE(connection.send_msg(stream_data(1, QUIC_STREAM_FLAG_NEW | QUIC_STREAM_FLAG_FIN, std::move(msg_to_send))), msg_to_send_len);
+    BCE(connection.send_msg(stream_data(0, QUIC_STREAM_FLAG_FIN, std::move(msg_to_send))), msg_to_send_len);
 
     connection.close();
 }

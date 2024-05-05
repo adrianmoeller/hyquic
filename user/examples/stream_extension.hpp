@@ -318,7 +318,7 @@ namespace hyquic
             return si::frame_to_send_container(frame_builder.trim());
         }
 
-        si::frame_to_send_container create_stream_frame(uint32_t max_frame_len,  std::shared_ptr<stream> _stream, buffer_view &msg, uint32_t flags)
+        si::frame_to_send_container create_stream_frame(uint32_t max_frame_len, std::shared_ptr<stream> _stream, buffer_view &msg, uint32_t flags)
         {
             uint64_t type = frame_type::STREAM;
             uint32_t header_len = 1;
@@ -331,7 +331,6 @@ namespace hyquic
             }
 
             type |= stream_bit::LEN;
-            header_len += get_var_int_length(max_frame_len);
 
             if (msg_len <= max_frame_len - header_len) {
                 if (flags & QUIC_STREAM_FLAG_FIN)
@@ -339,6 +338,8 @@ namespace hyquic
             } else {
                 msg_len = max_frame_len - header_len;
             }
+            
+            header_len += get_var_int_length(msg_len);
 
             buffer frame_buff(header_len + msg_len);
             buffer_view frame_builder(frame_buff);
