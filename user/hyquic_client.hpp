@@ -5,8 +5,8 @@ namespace hyquic
     class hyquic_client : public hyquic
     {
     public:
-        hyquic_client(char *addr, uint16_t port, uint32_t recv_from_sock_buff_size = RECV_BUFF_INIT_SIZE)
-            : hyquic(recv_from_sock_buff_size)
+        hyquic_client(char *addr, uint16_t port, uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE)
+            : hyquic(sock_recv_buff_size)
         {
             int err;
             sockfd = si::socket_socket(AF_INET, SOCK_DGRAM);

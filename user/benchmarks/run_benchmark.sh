@@ -32,7 +32,7 @@ shift $(($OPTIND - 1))
 APP_EXEC="${THIS_DIR}/../build/$@"
 
 rm -f benchmark.tmp
-timeout -k 20s 60s ${APP_EXEC} server ${SERVER_ARGS} ${ADDITIONAL_ARGS} &> benchmark.tmp &
+timeout -k 20s 240s ${APP_EXEC} server ${SERVER_ARGS} ${ADDITIONAL_ARGS} &> benchmark.tmp &
 SERVER_PID=$!
 trap "kill ${SERVER_PID}; exit ${EXIT_CODE}" SIGINT
 sleep 1

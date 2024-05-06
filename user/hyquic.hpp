@@ -80,15 +80,20 @@ namespace hyquic
         friend class hyquic;
     };
 
-#define RECV_BUFF_INIT_SIZE 65507
+#define SOCK_RECV_TIMEOUT 10 // sec
+#define SOCK_RECV_BUFF_INIT_SIZE 1024
+#define SOCK_RECV_BUFF_MIN_SIZE 512
+#define SOCK_RECV_FAILURE_THRESHOLD 10
+#define SOCK_RECV_FAILURE_RECOVERY_TIME 100 // ms
 
     class hyquic
     {
     public:
-        hyquic(uint32_t recv_from_sock_buff_size = RECV_BUFF_INIT_SIZE)
+        hyquic(uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE)
             : running(false),
             ready_to_send(false),
-            recv_from_sock_buff_size(recv_from_sock_buff_size), 
+            sock_recv_buff_size(sock_recv_buff_size), 
+            sock_recv_failures_in_row(0),
             recv_context(1), 
             common_context(1), 
             max_payload(0), 
@@ -235,7 +240,8 @@ namespace hyquic
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
         wait_queue<stream_data> recv_buff;
-        uint32_t recv_from_sock_buff_size;
+        uint32_t sock_recv_buff_size;
+        uint16_t sock_recv_failures_in_row;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
         std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
@@ -246,7 +252,7 @@ namespace hyquic
         void set_receive_timeout()
         {
             timeval tv = {
-                .tv_sec = 2,
+                .tv_sec = SOCK_RECV_TIMEOUT,
                 .tv_usec = 0
             };
             int err = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const void*) &tv, sizeof(tv));
@@ -391,21 +397,35 @@ namespace hyquic
 
         void recv_loop()
         {
-            int err = si::receive(sockfd, recv_ops, recv_from_sock_buff_size);
+            int err = si::receive(sockfd, recv_ops, sock_recv_buff_size);
             if (err < 0) {
                 if (err == -EAGAIN || err == -EWOULDBLOCK) {
-                    boost::asio::steady_timer(recv_context, std::chrono::milliseconds(50)).async_wait([this](const auto& e) {
+                    boost::asio::steady_timer(recv_context, std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME)).async_wait([this](const auto& e) {
                         recv_loop();
                     });
+                } else if (!running) {
+                    return;
                 } else {
-                    if (!running)
-                        return;
+                    printf("  Warning: socket receive failed (%i).\n", err);
 
-                    boost::asio::post(recv_context, [this]() {
-                        recv_loop();
-                    });
+                    sock_recv_failures_in_row++;
+                    sock_recv_buff_size /= 2;
+                    if (sock_recv_buff_size < SOCK_RECV_BUFF_MIN_SIZE)
+                        sock_recv_buff_size = SOCK_RECV_BUFF_MIN_SIZE;
+                    printf("  Reduced socket receive buffer size to %u.\n", sock_recv_buff_size);
+
+                    if (sock_recv_failures_in_row > SOCK_RECV_FAILURE_THRESHOLD) {
+                        throw network_error("Socket receive failed " + std::to_string(sock_recv_failures_in_row) + " times in a row.", err);
+                    } else {
+                        boost::asio::steady_timer(recv_context, std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME)).async_wait([this](const auto& e) {
+                            recv_loop();
+                        });
+                    }
                 }
             } else {
+                sock_recv_failures_in_row = 0;
+                sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE;
+
                 boost::asio::post(recv_context, [this]() {
                     recv_loop();
                 });

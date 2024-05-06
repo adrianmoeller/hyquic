@@ -41,6 +41,9 @@ int do_client_stream_ext(int argc, char *argv[])
         if (err < 0)
             return err;
         sent_bytes += err;
+
+        if (!(sent_bytes % (SEND_MSG_LEN * 10240)))
+			std::cout << "Sent " << sent_bytes / 1024 << "/" << TOTAL_LEN / 1024 << " KBytes." << std::endl;
         
         if (sent_bytes > TOTAL_LEN - SEND_MSG_LEN)
             break;
@@ -94,7 +97,7 @@ int do_client_no_ext(int argc, char *argv[])
             return err;
         sent_bytes += err;
         
-        if (!(sent_bytes % (SEND_MSG_LEN * 1024 * 4)))
+        if (!(sent_bytes % (SEND_MSG_LEN * 10240)))
 			std::cout << "Sent " << sent_bytes / 1024 << "/" << TOTAL_LEN / 1024 << " KBytes." << std::endl;
 
         if (sent_bytes > TOTAL_LEN - SEND_MSG_LEN)
@@ -156,7 +159,10 @@ int do_server_stream_ext(int argc, char *argv[])
 
         recv_bytes += recv_msg->buff.len;
 
-        usleep(20);
+        if (!(recv_bytes % (SEND_MSG_LEN * 10240)))
+			std::cout << "Received " << recv_bytes / 1024 << "/" << TOTAL_LEN / 1024 << " KBytes." << std::endl;
+
+        // usleep(20);
 
         if (recv_msg->flags & QUIC_STREAM_FLAG_FIN)
             break;
@@ -193,7 +199,10 @@ int do_server_no_ext(int argc, char *argv[])
 
         recv_bytes += recv_msg->buff.len;
 
-        usleep(20);
+        if (!(recv_bytes % (SEND_MSG_LEN * 10240)))
+			std::cout << "Received " << recv_bytes / 1024 << "/" << TOTAL_LEN / 1024 << " KBytes." << std::endl;
+
+        // usleep(20);
 
         if (recv_msg->flags & QUIC_STREAM_FLAG_FIN)
             break;
