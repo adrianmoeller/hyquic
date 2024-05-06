@@ -332,11 +332,14 @@ namespace hyquic
 
             type |= stream_bit::LEN;
 
-            if (msg_len <= max_frame_len - header_len) {
+            uint32_t estimated_header_len = header_len + get_var_int_length(max_frame_len);
+            assert(max_frame_len >= estimated_header_len);
+
+            if (msg_len <= max_frame_len - estimated_header_len) {
                 if (flags & QUIC_STREAM_FLAG_FIN)
                     type |= stream_bit::FIN;
             } else {
-                msg_len = max_frame_len - header_len;
+                msg_len = max_frame_len - estimated_header_len;
             }
             
             header_len += get_var_int_length(msg_len);
@@ -350,6 +353,8 @@ namespace hyquic
                 frame_builder.push_var(_stream->send.offset);
             frame_builder.push_var(msg_len);
             frame_builder.push_pulled(msg, msg_len);
+
+            _stream->send.offset += msg_len;
 
             if (_stream->send.state == send_stream_state::READY)
                 _stream->send.state = send_stream_state::SEND;
@@ -750,6 +755,9 @@ namespace hyquic
                 }
                 return true;
             }
+
+            _stream->send.frags++;
+		    _stream->send.bytes += payload_len;
 
             return false;
         }

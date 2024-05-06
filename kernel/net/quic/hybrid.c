@@ -28,6 +28,7 @@ inline void hyquic_enable(struct sock *sk)
     if (hyquic->enabled)
         return;
     hyquic->enabled = true;
+
     HQ_PR_DEBUG(sk, "enabled");
 }
 
@@ -242,14 +243,31 @@ inline bool hyquic_is_usrquic_frame(struct hyquic_container *hyquic, uint64_t fr
 }
 
 /**
- * Decodes and registers a local transport parameter and associated frame types with frame details communicated by user-quic.
+ * Sets hyquic options communicated by user-quic via socket options.
  * 
- * @param hyquic hyquic container
+ * @param sk quic socket
+ * @param data hyquic options
+ * @param length length of hyquic options
+*/
+int hyquic_set_options(struct sock *sk, struct hyquic_options *options, uint32_t length)
+{
+	if (length != sizeof(*options))
+		return -EINVAL;
+	
+	quic_hyquic(sk)->options = *options;
+	return 0;
+}
+
+/**
+ * Decodes and registers a local transport parameter and associated frame types with frame details communicated by user-quic via socket options.
+ * 
+ * @param sk quic socket
  * @param data encoded data
  * @param length length of encoded data
 */
-int hyquic_set_local_transport_parameter(struct hyquic_container *hyquic, void *data, uint32_t length)
+int hyquic_set_local_transport_parameter(struct sock *sk, void *data, uint32_t length)
 {
+    struct hyquic_container *hyquic = quic_hyquic(sk);
     struct hyquic_transport_param *entry;
 	uint64_t param_id;
 	void *param_data;
@@ -288,6 +306,8 @@ int hyquic_set_local_transport_parameter(struct hyquic_container *hyquic, void *
 		return -ENOMEM;
 	hyquic_transport_params_add(entry, &hyquic->transport_params_local);
 
+    hyquic_enable(sk);
+
     HQ_PR_DEBUG(hyquic->sk, "done, id=%llu, len=%u", param_id, param_data_length);
 	return 0;
 }
@@ -295,14 +315,15 @@ int hyquic_set_local_transport_parameter(struct hyquic_container *hyquic, void *
 /**
  * Gets and encodes transport parameters from remote peer to be transferred to user-quic via socket options.
  * 
- * @param hyquic hyquic container
- * @param len procided buffer length for option value
+ * @param sk quic socket
+ * @param len provided buffer length for option value
  * @param optval pointer to user space option value buffer
  * @param optlen pointer to actual length of option value
  * @return negative error code if not successful, otherwise 0
 */
-int hyquic_get_remote_transport_parameters(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen)
+int hyquic_get_remote_transport_parameters(struct sock *sk, int len, char __user *optval, int __user *optlen)
 {
+    struct hyquic_container *hyquic = quic_hyquic(sk);
     uint32_t total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
 	char __user *pos = optval;
 	struct hyquic_transport_param *cursor;
@@ -322,6 +343,8 @@ int hyquic_get_remote_transport_parameters(struct hyquic_container *hyquic, int 
 		pos += cursor->length;
 	}
 
+    hyquic_enable(sk);
+
     HQ_PR_DEBUG(hyquic->sk, "done");
 	return 0;
 }
@@ -330,13 +353,13 @@ int hyquic_get_remote_transport_parameters(struct hyquic_container *hyquic, int 
  * Gets the total length of transport parameters from remote peer to be transferred to user-quic via socket options.
  * Used to determine the required buffer size for remote transport parameters.
  * 
- * @param hyquic hyquic container
- * @param len procided buffer length for option value
+ * @param sk quic socket
+ * @param len provided buffer length for option value
  * @param optval pointer to user space option value buffer
  * @param optlen pointer to actual length of option value
  * @return negative error code if not successful, otherwise 0
 */
-int hyquic_get_remote_transport_parameters_length(struct hyquic_container *hyquic, int len, char __user *optval, int __user *optlen)
+int hyquic_get_remote_transport_parameters_length(struct sock *sk, int len, char __user *optval, int __user *optlen)
 {
     uint32_t total_params_length;
 
@@ -344,10 +367,46 @@ int hyquic_get_remote_transport_parameters_length(struct hyquic_container *hyqui
 		return -EINVAL;
 
 	len = sizeof(total_params_length);
-	total_params_length = hyquic_transport_params_total_length(&hyquic->transport_params_remote);
+	total_params_length = hyquic_transport_params_total_length(&quic_hyquic(sk)->transport_params_remote);
 
 	if (put_user(len, optlen) || copy_to_user(optval, &total_params_length, len))
 		return -EFAULT;
+
+    hyquic_enable(sk);
+
+	return 0;
+}
+
+/**
+ * Gets the MSS value to be transferred to user-quic via socket options.
+ * 
+ * @param sk quic socket
+ * @param len provided buffer length for option value
+ * @param optval pointer to user space option value buffer
+ * @param optlen pointer to actual length of option value
+ * @return negative error code if not successful, otherwise 0
+*/
+int hyquic_get_initial_mss(struct sock *sk, int len, char __user *optval, int __user *optlen)
+{
+	struct quic_packet *packet = quic_packet(sk);
+	struct hyquic_ctrlrecv_mss_update initial_mss = {
+		.max_payload = quic_packet_max_payload(packet),
+		.max_payload_dgram = quic_packet_max_payload_dgram(packet)
+	};
+
+	if (len < sizeof(initial_mss)) {
+		HQ_PR_ERR(sk, "provided buffer too small, %lu bytes needed", sizeof(initial_mss));
+		return -EINVAL;
+	}
+
+	len = sizeof(initial_mss);
+
+	if (put_user(len, optlen) || copy_to_user(optval, &initial_mss, len))
+		return -EFAULT;
+
+	hyquic_enable(sk);
+
+	HQ_PR_DEBUG(sk, "done, max_payload=%u, max_payload_dgram=%u", initial_mss.max_payload, initial_mss.max_payload_dgram);
 	return 0;
 }
 

@@ -87,6 +87,7 @@ namespace hyquic
     public:
         hyquic(uint32_t recv_from_sock_buff_size = RECV_BUFF_INIT_SIZE)
             : running(false),
+            ready_to_send(false),
             recv_from_sock_buff_size(recv_from_sock_buff_size), 
             recv_context(1), 
             common_context(1), 
@@ -144,11 +145,17 @@ namespace hyquic
 
         inline int send_frames(si::frames_to_send_provider &frames, bool dont_wait = false)
         {
+            if (!ready_to_send)
+                return -EAGAIN;
+
             return si::send_frames(sockfd, frames, dont_wait);
         }
 
         inline int send_one_frame(si::frame_to_send_container &&frame_cont, bool dont_wait = false)
         {
+            if (!ready_to_send)
+                return -EAGAIN;
+
             si::default_frames_to_send_provider frames_to_send;
             frames_to_send.push(std::move(frame_cont));
             return send_frames(frames_to_send, dont_wait);
@@ -156,6 +163,9 @@ namespace hyquic
 
         inline int send_msg(const stream_data& msg)
         {
+            if (!ready_to_send)
+                return -EAGAIN;
+                
             return quic_sendmsg(sockfd, msg.buff.data, msg.buff.len, msg.id, msg.flags);
         }
 
@@ -193,6 +203,7 @@ namespace hyquic
 
     protected:
         bool running;
+        bool ready_to_send;
         int sockfd;
 
         void run()
@@ -200,7 +211,9 @@ namespace hyquic
             running = true;
             set_receive_timeout();
             collect_remote_transport_parameter();
+            get_inital_mss();
             notify_extensions_handshake_done();
+            ready_to_send = true;
             boost::asio::post(recv_context, [this]() {
                 recv_loop();
             });
@@ -283,6 +296,18 @@ namespace hyquic
                 extension &ext = tp_id_to_extension.at(tp_id);
                 ext.set_remote_transport_parameter(tp_beginning.copy(tp_length));
             }
+        }
+
+        void get_inital_mss()
+        {
+            hyquic_ctrlrecv_mss_update initial_mss;
+            socklen_t len = sizeof(initial_mss);
+            int err = si::socket_getsockopt(sockfd, HYQUIC_SOCKOPT_INITIAL_MSS, &initial_mss, &len);
+            if (err)
+                throw network_error("Getting initial MSS values failed.", err);
+
+            max_payload = initial_mss.max_payload;
+            max_payload_dgram = initial_mss.max_payload_dgram;
         }
 
         void notify_extensions_handshake_done()

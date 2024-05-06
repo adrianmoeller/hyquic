@@ -680,11 +680,12 @@ void quic_packet_mss_update(struct sock *sk, int mss)
 
 	mss_dgram = quic_outq_max_dgram(quic_outq(sk));
 	if (!mss_dgram)
-		return;
+		goto out;
 	if (mss_dgram > mss)
 		mss_dgram = mss;
 	packet->mss[1] = mss_dgram - QUIC_TAG_LEN;
 
+out:
 	if (quic_hyquic(sk)->enabled)
 		hyquic_handle_mss_update(sk, packet);
 }

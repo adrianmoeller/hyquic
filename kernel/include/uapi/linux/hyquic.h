@@ -88,6 +88,7 @@ struct hyquic_ctrlrecv_info {
 #define HYQUIC_SOCKOPT_OPTIONS					15
 #define HYQUIC_SOCKOPT_TRANSPORT_PARAM			16
 #define HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN		17
+#define HYQUIC_SOCKOPT_INITIAL_MSS				18
 
 /**
  * Frame details communicated by user-quic. Used by kernel-quic to properly handle unknown frames.

@@ -1352,23 +1352,6 @@ static int quic_sock_set_connection_close(struct sock *sk, struct quic_connectio
 	return 0;
 }
 
-static int hyquic_sock_set_options(struct sock *sk, struct hyquic_options *options, uint32_t length)
-{
-	struct hyquic_container *hyquic = quic_hyquic(sk);
-	
-	if (length != sizeof(*options))
-		return -EINVAL;
-	
-	hyquic->options = *options;
-	return 0;
-}
-
-static int hyquic_sock_set_transport_param(struct sock *sk, void *data, uint32_t length)
-{
-	hyquic_enable(sk);
-	return hyquic_set_local_transport_parameter(quic_hyquic(sk), data, length);
-}
-
 static int quic_setsockopt(struct sock *sk, int level, int optname,
 			   sockptr_t optval, unsigned int optlen)
 {
@@ -1426,10 +1409,10 @@ static int quic_setsockopt(struct sock *sk, int level, int optname,
 		retval = quic_sock_set_crypto_secret(sk, kopt, optlen);
 		break;
 	case HYQUIC_SOCKOPT_OPTIONS:
-		retval = hyquic_sock_set_options(sk, kopt, optlen);
+		retval = hyquic_set_options(sk, kopt, optlen);
 		break;
 	case HYQUIC_SOCKOPT_TRANSPORT_PARAM:
-		retval = hyquic_sock_set_transport_param(sk, kopt, optlen);
+		retval = hyquic_set_local_transport_parameter(sk, kopt, optlen);
 		break;
 	default:
 		retval = -ENOPROTOOPT;
@@ -1658,18 +1641,6 @@ static int quic_sock_get_connection_close(struct sock *sk, int len, char __user 
 	return 0;
 }
 
-static int hyquic_sock_get_transport_param(struct sock *sk, int len, char __user *optval, int __user *optlen)
-{
-	hyquic_enable(sk);
-	return hyquic_get_remote_transport_parameters(quic_hyquic(sk), len, optval, optlen);
-}
-
-static int hyquic_sock_get_transport_param_len(struct sock *sk, int len, char __user *optval, int __user *optlen)
-{
-	hyquic_enable(sk);
-	return hyquic_get_remote_transport_parameters_length(quic_hyquic(sk), len, optval, optlen);
-}
-
 static int quic_getsockopt(struct sock *sk, int level, int optname,
 			   char __user *optval, int __user *optlen)
 {
@@ -1718,10 +1689,13 @@ static int quic_getsockopt(struct sock *sk, int level, int optname,
 		retval = quic_sock_get_crypto_secret(sk, len, optval, optlen);
 		break;
 	case HYQUIC_SOCKOPT_TRANSPORT_PARAM:
-		retval = hyquic_sock_get_transport_param(sk, len, optval, optlen);
+		retval = hyquic_get_remote_transport_parameters(sk, len, optval, optlen);
 		break;
 	case HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN:
-		retval = hyquic_sock_get_transport_param_len(sk, len, optval, optlen);
+		retval = hyquic_get_remote_transport_parameters_length(sk, len, optval, optlen);
+		break;
+	case HYQUIC_SOCKOPT_INITIAL_MSS:
+		retval = hyquic_get_initial_mss(sk, len, optval, optlen);
 		break;
 	default:
 		retval = -ENOPROTOOPT;
