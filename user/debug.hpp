@@ -4,14 +4,26 @@
 #include <iostream>
 #include <chrono>
 #include <source_location>
+#include <string>
+#include <mutex>
+#include <boost/algorithm/string.hpp>
 
 using namespace std;
 
-inline void pr_pos(const source_location loc = source_location::current())
+namespace hq_debug
+{
+    static mutex mut;   
+} // namespace debug
+
+inline void pr_pos(string msg = string(), const source_location loc = source_location::current())
 {
     const auto now = chrono::system_clock::now().time_since_epoch();
+    string func_name(loc.function_name());
+    boost::algorithm::replace_all(func_name, "hyquic::", "");
+
+    std::lock_guard<std::mutex> lock(hq_debug::mut);
     cout << chrono::duration_cast<chrono::milliseconds>(now).count();
-    cout << " " << loc.file_name() << ":" << loc.line() << "@" << loc.function_name() << endl;
+    cout << " " << loc.file_name() << ":" << loc.line() << "@" << func_name << " | " << msg << endl;
 }
 
 #endif // __HYQUIC_DEBUG_HPP__

@@ -20,6 +20,7 @@ extern "C" {
 #include "buffer.hpp"
 #include "sock_interface.hpp"
 #include "errors.hpp"
+#include "debug.hpp"
 
 namespace hyquic
 {
@@ -84,7 +85,7 @@ namespace hyquic
 #define SOCK_RECV_BUFF_INIT_SIZE 1024
 #define SOCK_RECV_BUFF_MIN_SIZE 512
 #define SOCK_RECV_FAILURE_THRESHOLD 10
-#define SOCK_RECV_FAILURE_RECOVERY_TIME 100 // ms
+#define SOCK_RECV_FAILURE_RECOVERY_TIME 200 // ms
 
     class hyquic
     {
@@ -95,7 +96,8 @@ namespace hyquic
             sock_recv_buff_size(sock_recv_buff_size), 
             sock_recv_failures_in_row(0),
             recv_context(1), 
-            common_context(1), 
+            common_context(1),
+            recv_timer(recv_context),
             max_payload(0), 
             max_payload_dgram(0)
         {
@@ -239,6 +241,7 @@ namespace hyquic
     private:
         boost::asio::thread_pool common_context;
         boost::asio::thread_pool recv_context;
+        boost::asio::steady_timer recv_timer;
         wait_queue<stream_data> recv_buff;
         uint32_t sock_recv_buff_size;
         uint16_t sock_recv_failures_in_row;
@@ -398,9 +401,11 @@ namespace hyquic
         void recv_loop()
         {
             int err = si::receive(sockfd, recv_ops, sock_recv_buff_size);
+            pr_pos("received=" + std::to_string(err));
             if (err < 0) {
                 if (err == -EAGAIN || err == -EWOULDBLOCK) {
-                    boost::asio::steady_timer(recv_context, std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME)).async_wait([this](const auto& e) {
+                    recv_timer.expires_from_now(std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME));
+                    recv_timer.async_wait([this](const auto& e) {
                         recv_loop();
                     });
                 } else if (!running) {
@@ -409,15 +414,13 @@ namespace hyquic
                     printf("  Warning: socket receive failed (%i).\n", err);
 
                     sock_recv_failures_in_row++;
-                    sock_recv_buff_size /= 2;
-                    if (sock_recv_buff_size < SOCK_RECV_BUFF_MIN_SIZE)
-                        sock_recv_buff_size = SOCK_RECV_BUFF_MIN_SIZE;
-                    printf("  Reduced socket receive buffer size to %u.\n", sock_recv_buff_size);
-
                     if (sock_recv_failures_in_row > SOCK_RECV_FAILURE_THRESHOLD) {
-                        throw network_error("Socket receive failed " + std::to_string(sock_recv_failures_in_row) + " times in a row.", err);
+                        printf("  Socket receive failed %u times in a row. Terminating.\n", sock_recv_failures_in_row);
+                        return;
+                        // throw network_error("Socket receive failed " + std::to_string(sock_recv_failures_in_row) + " times in a row.", err);
                     } else {
-                        boost::asio::steady_timer(recv_context, std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME * sock_recv_failures_in_row)).async_wait([this](const auto& e) {
+                        recv_timer.expires_from_now(std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME * (long) std::pow(2, sock_recv_failures_in_row)));
+                        recv_timer.async_wait([this](const auto& e) {
                             recv_loop();
                         });
                     }
@@ -434,6 +437,7 @@ namespace hyquic
 
         void handle_hyquic_ctrl_data(const buffer &buff, hyquic_ctrl_type data_type, const hyquic_ctrlrecv_info_details &details)
         {
+            pr_pos();
             assert(buff.len);
             switch (data_type)
             {

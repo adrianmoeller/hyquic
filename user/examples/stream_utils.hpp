@@ -91,6 +91,31 @@ namespace hyquic
         uint64_t offset;
         bool fin;
         buffer payload;
+
+        stream_frame(std::shared_ptr<stream> _stream, uint64_t offset, bool fin, buffer payload)
+            : _stream(_stream), offset(offset), fin(fin), payload(std::move(payload))
+        {
+        }
+
+        stream_frame(const stream_frame&) = delete;
+        stream_frame& operator=(stream_frame&) = delete;
+
+        stream_frame(stream_frame &&other)
+            : _stream(other._stream), offset(other.offset), fin(other.fin), payload(std::move(other.payload))
+        {
+            other._stream = std::shared_ptr<stream>();
+            other.offset = 0;
+            other.fin = false;
+        }
+
+        stream_frame& operator=(stream_frame &&other)
+        {
+            std::swap(_stream, other._stream);
+            std::swap(offset, other.offset);
+            std::swap(fin, other.fin);
+            std::swap(payload, other.payload);
+            return *this;
+        }
     };
 
     struct stream_frame_to_send_container

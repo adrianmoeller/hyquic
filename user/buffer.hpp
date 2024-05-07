@@ -356,9 +356,22 @@ namespace hyquic
 
         inline void push(T &&value)
         {
-            std::lock_guard<std::mutex> lock(mut);
-            internal_queue.push(std::move(value));
+            {
+                std::lock_guard<std::mutex> lock(mut);
+                internal_queue.push(std::move(value));
+            }
             cv.notify_all();
+        }
+
+        inline std::optional<T> pop()
+        {
+            std::lock_guard<std::mutex> lock(mut);
+            if (!internal_queue.empty()) {
+                std::optional<T> value = std::optional<T>(std::move(internal_queue.front()));
+                internal_queue.pop();
+                return std::move(value);
+            }
+            return std::optional<T>();
         }
 
         inline T wait_pop()
@@ -369,7 +382,6 @@ namespace hyquic
             });
             T value = std::move(internal_queue.front());
             internal_queue.pop();
-            lock.unlock();
             return std::move(value);
         }
 
@@ -385,7 +397,6 @@ namespace hyquic
                 value = std::optional<T>(std::move(internal_queue.front()));
                 internal_queue.pop();
             }
-            lock.unlock();
             return std::move(value);
         }
 
@@ -401,7 +412,6 @@ namespace hyquic
                 value = std::optional<T>(std::move(internal_queue.front()));
                 internal_queue.pop();
             }
-            lock.unlock();
             return std::move(value);
         }
 
