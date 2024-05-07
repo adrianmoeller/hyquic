@@ -774,7 +774,8 @@ namespace hyquic
                 frames_to_send.transfer_one(data_frames_to_send);
             }
 
-            container.send_frames(frames_to_send);
+            if (!frames_to_send.empty())
+                container.send_frames(frames_to_send);
         }
     };
 } // namespace hyquic

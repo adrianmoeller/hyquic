@@ -3,15 +3,11 @@
 #include "number.h"
 #include "socket.h"
 #include "frame.h"
+#include "debug.h"
 #include "intercom.h"
+#include "hybrid_frame_format_spec.h"
 #include "hybrid.h"
 
-#define _HQ_MSG(___sk, ___msg) "[HyQUIC] %s@%s: "___msg"\n",quic_is_serv(___sk)?"server":"client",__func__
-#define HQ_MSG(__sk, __msg) _HQ_MSG(__sk, __msg)
-#define HQ_PR_ERR(__sk, __msg, ...) printk(KERN_ERR pr_fmt("[HyQUIC] %s@%s: "__msg"\n"), quic_is_serv(__sk)?"server":"client", __func__, ##__VA_ARGS__)
-#define HQ_PR_DEBUG(__sk, __msg, ...) pr_debug(_HQ_MSG(__sk, __msg), ##__VA_ARGS__)
-
-#include "hybrid_frame_format_spec.h"
 
 struct hyquic_frame_details_entry {
     struct hlist_node node;

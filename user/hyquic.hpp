@@ -417,7 +417,7 @@ namespace hyquic
                     if (sock_recv_failures_in_row > SOCK_RECV_FAILURE_THRESHOLD) {
                         throw network_error("Socket receive failed " + std::to_string(sock_recv_failures_in_row) + " times in a row.", err);
                     } else {
-                        boost::asio::steady_timer(recv_context, std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME)).async_wait([this](const auto& e) {
+                        boost::asio::steady_timer(recv_context, std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME * sock_recv_failures_in_row)).async_wait([this](const auto& e) {
                             recv_loop();
                         });
                     }

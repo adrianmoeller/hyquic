@@ -13,6 +13,7 @@
 
 #include <uapi/linux/quic.h>
 #include <net/udp_tunnel.h>
+#include "debug.h"
 #include "connection.h"
 #include "hashtable.h"
 #include "protocol.h"

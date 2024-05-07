@@ -285,7 +285,7 @@ void quic_outq_retransmit_check(struct sock *sk, u8 level, s64 largest, s64 smal
 	struct sk_buff_head *head;
 	s64 acked_number = 0;
 
-	pr_debug("[QUIC] %s largest: %llu, smallest: %llu\n", __func__, largest, smallest);
+	Q_PR_DEBUG(sk, "Start, largest=%llu, smallest=%llu", largest, smallest);
 	if (quic_path_pl_confirm(quic_dst(sk), largest, smallest)) {
 		pathmtu = quic_path_pl_recv(quic_dst(sk), &raise_timer, &complete);
 		if (pathmtu)
@@ -333,6 +333,8 @@ void quic_outq_retransmit_check(struct sock *sk, u8 level, s64 largest, s64 smal
 			}
 			stream->send.state = update.state;
 		} else if (snd_cb->frame_type == QUIC_FRAME_RESET_STREAM) {
+			if (!stream)
+				goto unlink;
 			update.id = stream->id;
 			update.state = QUIC_STREAM_SEND_STATE_RESET_RECVD;
 			update.errcode = stream->send.errcode;
@@ -340,6 +342,8 @@ void quic_outq_retransmit_check(struct sock *sk, u8 level, s64 largest, s64 smal
 				continue;
 			stream->send.state = update.state;
 		} else if (snd_cb->frame_type == QUIC_FRAME_STREAM_DATA_BLOCKED) {
+			if (!stream)
+				goto unlink;
 			stream->send.data_blocked = 0;
 		} else if (snd_cb->frame_type == QUIC_FRAME_DATA_BLOCKED) {
 			outq->data_blocked = 0;
@@ -348,6 +352,7 @@ unlink:
 		if (outq->retransmit_skb == skb)
 			outq->retransmit_skb = NULL;
 		__skb_unlink(skb, head);
+		Q_PR_DEBUG(sk, "Removed, pn=%lli, type=%u", snd_cb->packet_number, snd_cb->frame_type);
 		kfree_skb(skb);
 	}
 
@@ -410,7 +415,7 @@ next:
 				if (snd_cb->data_bytes)
 					quic_cong_cwnd_update_after_timeout(sk, packet_number, transmit_ts);
 				kfree_skb(skb);
-				goto next;
+				return;
 			}
 		}
 	}

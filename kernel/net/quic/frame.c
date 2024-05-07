@@ -1314,7 +1314,7 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, struct quic_
 					ret = hyquic_process_unkwn_frame(sk, skb, pki, len, frame_details_cont, var_frame_encountered);
 					if (ret < 0)
 						return ret;
-					if (var_frame_encountered)
+					if (*var_frame_encountered)
 						break;
 					goto end_while;
 				}
