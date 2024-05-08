@@ -778,8 +778,9 @@ namespace hyquic
 
             pr_pos("sent=" + std::to_string(payload_len));
             if (_stream->send.bytes + payload_len > _stream->send.max_bytes) {
-                if (!_stream->send.data_blocked) {
+                if (!_stream->send.data_blocked && _stream->send.last_max_bytes < _stream->send.max_bytes) {
                     frames_to_send.push(create_stream_data_blocked_frame(_stream), _stream);
+                    _stream->send.last_max_bytes = _stream->send.max_bytes;
                     _stream->send.data_blocked = 1;
                 }
                 return true;

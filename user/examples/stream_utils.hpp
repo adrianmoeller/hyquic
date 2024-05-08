@@ -30,6 +30,7 @@ namespace hyquic
         uint64_t id;
 
         struct {
+            uint64_t last_max_bytes;
             uint64_t max_bytes;
             uint64_t window;
             uint64_t bytes;
