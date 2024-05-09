@@ -78,6 +78,20 @@ public:
             true,
             b3.get_specification()
         ));
+
+        frame_format_specification_builder b4;
+        b4.add_fix_len_component(2);
+        b4.add_backfill_component(true);
+
+        frame_details.push_back(si::frame_details_container(
+            0xb4,
+            false,
+            false,
+            true,
+            false,
+            true,
+            b4.get_specification()
+        ));
     }
 
     inline buffer transport_parameter()
@@ -137,6 +151,14 @@ public:
             BCE(content2, 42);
             return 1 + content1_len + content2_len;
         }
+        case 0xb4: {
+            uint32_t content0 = frame_content.pull_int<NETWORK>(2);
+            BCE(content0, 42);
+            uint32_t content1 = frame_content.pull_int<NETWORK>(4);
+            BCE(content1, 123456);
+            BCE(frame_content.end(), 0);
+            return 2 + 4;
+        }
         }
         return 0;
     }
@@ -169,7 +191,7 @@ void client_send_frame(hyquic_client &client, int test_case)
         break;
     }
     case 1: {
-        buffer frame_buff(2 + 5);
+        buffer frame_buff(2 + 4 + 1);
         buffer_view cursor(frame_buff);
         cursor.push_var(0xb1);
         cursor.push_int<NETWORK>(42, 4);
@@ -195,6 +217,15 @@ void client_send_frame(hyquic_client &client, int test_case)
         cursor.push_var(9999);
         cursor.push_var(42);
         frames_to_send.push(si::frame_to_send_container(std::move(frame_buff)));
+        break;
+    }
+    case 4: {
+        buffer frame_buff(2 + 2 + 4);
+        buffer_view cursor(frame_buff);
+        cursor.push_var(0xb4);
+        cursor.push_int<NETWORK>(42, 2);
+        cursor.push_int<NETWORK>(123456, 4);
+        frames_to_send.push(si::frame_to_send_container(std::move(frame_buff), 4));
         break;
     }
     }

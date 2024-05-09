@@ -8,7 +8,7 @@
 #include "errors.hpp"
 
 #ifndef HYQUIC_REF_ID_MAX
-#define HYQUIC_REF_ID_MAX 63
+#define HYQUIC_REF_ID_MAX 15
 #endif
 
 namespace hyquic
@@ -46,29 +46,29 @@ namespace hyquic
             return buff;
         }
 
-        uint8_t add_var_int_component(bool declares_length = false)
+        uint8_t add_var_int_component(bool declares_length = false, bool is_payload = false)
         {
             uint8_t ref_id = 0;
             if (declares_length) {
                 ref_id = ref_id_counter++;
             }
-            components.push_back(std::make_unique<var_int_component>(ref_id));
+            components.push_back(std::make_unique<var_int_component>(ref_id, is_payload));
             return ref_id;
         }
 
-        uint8_t add_fix_len_component(uint32_t length, bool declares_length = false)
+        uint8_t add_fix_len_component(uint32_t length, bool declares_length = false, bool is_payload = false)
         {
             uint8_t ref_id = 0;
             if (declares_length) {
                 ref_id = ref_id_counter++;
             }
-            components.push_back(std::make_unique<fix_len_component>(length, ref_id));
+            components.push_back(std::make_unique<fix_len_component>(length, ref_id, is_payload));
             return ref_id;
         }
 
-        void add_mult_const_decl_len_component(uint8_t declared_length_ref_id, uint8_t constant)
+        void add_mult_const_decl_len_component(uint8_t declared_length_ref_id, uint8_t constant, bool is_payload = false)
         {
-            components.push_back(std::make_unique<mult_const_decl_len_component>(constant, declared_length_ref_id));
+            components.push_back(std::make_unique<mult_const_decl_len_component>(constant, declared_length_ref_id, is_payload));
         }
 
         void add_mult_scope_decl_len_component(uint8_t declared_length_ref_id, frame_format_specification_builder &scope)
@@ -76,18 +76,19 @@ namespace hyquic
             components.push_back(std::make_unique<mult_scope_decl_len_component>(scope, declared_length_ref_id));
         }
 
-        void add_backfill_component()
+        void add_backfill_component(bool is_payload = false)
         {
-            components.push_back(std::make_unique<backfill_component>());
+            components.push_back(std::make_unique<backfill_component>(is_payload));
         }
 
     private:
         struct format_component
         {
             uint8_t ref_id;
+            bool is_payload;
 
-            format_component(uint8_t ref_id = 0)
-                : ref_id(ref_id)
+            format_component(uint8_t ref_id = 0, bool is_payload = false)
+                : ref_id(ref_id), is_payload(is_payload)
             {
                 if (ref_id > HYQUIC_REF_ID_MAX)
                     throw frame_format_spec_error("Maximum number of reference IDs reached.");
@@ -99,8 +100,8 @@ namespace hyquic
 
         struct var_int_component : public format_component
         {
-            var_int_component(uint8_t ref_id = 0)
-                : format_component(ref_id)
+            var_int_component(uint8_t ref_id = 0, bool is_payload = false)
+                : format_component(ref_id, is_payload)
             {
             }
 
@@ -111,7 +112,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT << 5);
+                uint8_t header = ref_id | (is_payload << 4) | (HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT << 5);
                 target.push_int<NETWORK>(header, 1);
             }
         };
@@ -120,8 +121,8 @@ namespace hyquic
         {
             uint32_t length;
 
-            fix_len_component(uint32_t length, uint8_t ref_id = 0)
-                : format_component(ref_id), length(length)
+            fix_len_component(uint32_t length, uint8_t ref_id = 0, bool is_payload = false)
+                : format_component(ref_id, is_payload), length(length)
             {
             }
 
@@ -132,7 +133,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN << 5);
+                uint8_t header = ref_id | (is_payload << 4) | (HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN << 5);
                 target.push_int<NETWORK>(header, 1);
                 target.push_var(length);
             }
@@ -142,8 +143,8 @@ namespace hyquic
         {
             uint8_t constant;
 
-            mult_const_decl_len_component(uint8_t constant, uint8_t ref_id = 0)
-                : format_component(ref_id), constant(constant)
+            mult_const_decl_len_component(uint8_t constant, uint8_t ref_id = 0, bool is_payload = false)
+                : format_component(ref_id, is_payload), constant(constant)
             {
             }
 
@@ -154,7 +155,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 5);
+                uint8_t header = ref_id | (is_payload << 4) | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 5);
                 target.push_int<NETWORK>(header, 1);
                 target.push_int<NETWORK>(constant, 1);
             }
@@ -176,7 +177,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = ref_id | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 5);
+                uint8_t header = ref_id | (is_payload << 4) | (HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN << 5);
                 target.push_int<NETWORK>(header, 1);
 
                 size_t scope_length = scope.size();
@@ -192,7 +193,8 @@ namespace hyquic
 
         struct backfill_component : public format_component
         {
-            backfill_component()
+            backfill_component(bool is_payload = false)
+                : format_component(0, is_payload)
             {
             }
 
@@ -203,7 +205,7 @@ namespace hyquic
 
             inline void encode(buffer_view &target) const
             {
-                uint8_t header = HYQUIC_FRAME_FORMAT_SPEC_COMP_BACKFILL << 5;
+                uint8_t header = ref_id | (is_payload << 4) | (HYQUIC_FRAME_FORMAT_SPEC_COMP_BACKFILL << 5);
                 target.push_int<NETWORK>(header, 1);
             }
         };

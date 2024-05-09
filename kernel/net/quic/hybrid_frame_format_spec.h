@@ -1,14 +1,27 @@
 #ifndef __HYBRID_FRAME_FORMAT_SPEC_H__
 #define __HYBRID_FRAME_FORMAT_SPEC_H__
 
-#define HYQUIC_REF_ID_MAX 31
+#define HYQUIC_REF_ID_MAX 15
+
+struct hyquic_frame_format_spec_inout {
+    struct {
+        uint8_t *frame_content;
+        uint32_t remaining_length;
+        uint8_t *format_specification;
+        uint32_t spec_length;
+    } in;
+    struct {
+        uint32_t parsed_length;
+        uint32_t parsed_payload;
+    } out;
+};
 
 struct hyquic_frame_format_spec_cont {
     uint32_t spec_length;
     uint8_t *spec_cursor;
     uint32_t content_length;
     uint8_t *content_cursor;
-    uint32_t parsed_len;
+    uint32_t parsed_payload;
     uint64_t ref_id_index[HYQUIC_REF_ID_MAX];
 };
 
@@ -32,7 +45,7 @@ static inline uint64_t hyquic_declared_length_from_index(struct sock *sk, struct
     return cont->ref_id_index[ref_id - 1];
 }
 
-static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     uint64_t value;
     uint8_t value_len;
@@ -46,6 +59,9 @@ static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_
     cont->spec_cursor++;
     cont->spec_length--;
 
+    if (is_payload)
+        cont->parsed_payload += value_len;
+
     if (ref_id)
         return hyquic_ref_id_to_index(sk, cont, ref_id, value);
     
@@ -53,7 +69,7 @@ static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_
     return 0;
 }
 
-static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     uint64_t length_value, declared_length;
     uint8_t length_value_len;
@@ -67,6 +83,9 @@ static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_
         HQ_PR_ERR(sk, "invalid specification (var-int expected)");
         return -EINVAL;
     }
+
+    if (is_payload)
+        cont->parsed_payload += length_value;
 
     if (ref_id) {
         if (length_value > 8) {
@@ -89,7 +108,7 @@ static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_
     return 0;
 }
 
-static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     uint64_t declared_length;
     uint64_t constant;
@@ -122,6 +141,8 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
 
     product = declared_length * constant;
 
+    if (is_payload)
+        cont->parsed_payload += product;
     cont->content_cursor += product;
     cont->content_length -= product;
 
@@ -131,12 +152,17 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
 
 static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont);
 
-static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
+static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     int err, i;
     uint64_t declared_length;
     uint64_t scope_length;
     struct hyquic_frame_format_spec_cont scope_cont;
+
+    if (is_payload) {
+        HQ_PR_ERR(sk, "invalid specification (component cannot be payload; instead, declare payload for scope components)");
+        return -EINVAL;
+    }
 
     if (!ref_id) {
         HQ_PR_ERR(sk, "invalid specification (no reference id)");
@@ -192,8 +218,10 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
     return 0;
 }
 
-static inline int hyquic_parse_backfill_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont)
+static inline int hyquic_parse_backfill_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, bool is_payload)
 {
+    uint32_t length;
+
     cont->spec_cursor++;
     cont->spec_length--;
 
@@ -202,10 +230,14 @@ static inline int hyquic_parse_backfill_component(struct sock *sk, struct hyquic
         return -EINVAL;
     }
 
-    cont->content_cursor += cont->content_length;
+    length = cont->content_length;
+
+    if (is_payload)
+        cont->parsed_payload += length;
+    cont->content_cursor += length;
     cont->content_length = 0;
 
-    HQ_PR_DEBUG(sk, "done");
+    HQ_PR_DEBUG(sk, "done, length=%u", length);
     return 0;
 }
 
@@ -213,36 +245,38 @@ static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame
 {
     uint8_t comp_header = *cont->spec_cursor;
     uint8_t comp_type = comp_header >> 5;
-    uint8_t comp_ref_id = comp_header & 0x1F;
+    uint8_t comp_ref_id = comp_header & 0x0F;
+    bool comp_is_payload = comp_header & 0x10;
 
     switch (comp_type) {
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_VAR_INT:
-        return hyquic_parse_var_int_component(sk, cont, comp_ref_id);
+        return hyquic_parse_var_int_component(sk, cont, comp_ref_id, comp_is_payload);
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_FIX_LEN:
-        return hyquic_parse_fix_len_component(sk, cont, comp_ref_id);
+        return hyquic_parse_fix_len_component(sk, cont, comp_ref_id, comp_is_payload);
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_CONST_DECL_LEN:
-        return hyquic_parse_mult_const_declared_len_component(sk, cont, comp_ref_id);
+        return hyquic_parse_mult_const_declared_len_component(sk, cont, comp_ref_id, comp_is_payload);
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_MULT_SCOPE_DECL_LEN:
-        return hyquic_parse_mult_scope_declared_len_component(sk, cont, comp_ref_id);
+        return hyquic_parse_mult_scope_declared_len_component(sk, cont, comp_ref_id, comp_is_payload);
     case HYQUIC_FRAME_FORMAT_SPEC_COMP_BACKFILL:
-        return hyquic_parse_backfill_component(sk, cont);
+        return hyquic_parse_backfill_component(sk, cont, comp_is_payload);
     default:
         return -EINVAL;
     }
 }
 
-static inline int hyquic_parse_frame_content(struct sock *sk, uint8_t *frame_content, uint32_t remaining_length, uint8_t *format_specification, uint32_t spec_length, uint32_t *parsed_length)
+static inline int hyquic_parse_frame_content(struct sock *sk, struct hyquic_frame_format_spec_inout *params)
 {
     int err;
     struct hyquic_frame_format_spec_cont cont = {
-        .spec_length = spec_length,
-        .spec_cursor = format_specification,
-        .content_length = remaining_length,
-        .content_cursor = frame_content,
+        .spec_length = params->in.spec_length,
+        .spec_cursor = params->in.format_specification,
+        .content_length = params->in.remaining_length,
+        .content_cursor = params->in.frame_content,
+        .parsed_payload = 0,
         .ref_id_index = {0}
     };
 
-    HQ_PR_DEBUG(sk, "spec_length=%u", spec_length);
+    HQ_PR_DEBUG(sk, "spec_length=%u", cont.spec_length);
 
     while (cont.spec_length > 0) {
         err = hyquic_parse_next_spec_component(sk, &cont);
@@ -250,8 +284,9 @@ static inline int hyquic_parse_frame_content(struct sock *sk, uint8_t *frame_con
             return err;
     }
 
-    *parsed_length = cont.content_cursor - frame_content;
-    HQ_PR_DEBUG(sk, "done, parsed=%u", *parsed_length);
+    params->out.parsed_length = cont.content_cursor - params->in.frame_content;
+    params->out.parsed_payload = cont.parsed_payload;
+    HQ_PR_DEBUG(sk, "done, parsed=%u, payload=%u", params->out.parsed_length, params->out.parsed_payload);
     return 0;
 }
 

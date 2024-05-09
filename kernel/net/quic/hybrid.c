@@ -584,7 +584,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
     struct sk_buff *fskb;
     struct hyquic_frame_details_cont *frame_details_cont;
     struct hyquic_frame_details *frame_details;
-    uint32_t parsed_frame_content_length;
+    struct hyquic_frame_format_spec_inout ffs_params;
     struct hyquic_ctrlrecv_raw_frames_var *ctrl_details = &HYQUIC_RCV_CB(skb)->hyquic_ctrl_details.raw_frames_var;
 
     while (len > 0)
@@ -596,12 +596,19 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
         if (frame_details_cont) {
             frame_details = &frame_details_cont->details;
             if (frame_details->format_specification_avail) {
-                ret = hyquic_parse_frame_content(sk, tmp_data_ptr, len, frame_details_cont->format_specification, frame_details->format_specification_avail, &parsed_frame_content_length);
+                ffs_params = (struct hyquic_frame_format_spec_inout) {.in = {
+                    .frame_content = tmp_data_ptr,
+                    .remaining_length = len,
+                    .format_specification = frame_details_cont->format_specification,
+                    .spec_length = frame_details->format_specification_avail
+                }};
+                ret = hyquic_parse_frame_content(sk, &ffs_params);
                 if (ret)
                     return ret;
-                frame_len = frame_type_len + parsed_frame_content_length;
+
+                frame_len = frame_type_len + ffs_params.out.parsed_length;
                 if (frame_len > len) {
-                    HQ_PR_ERR(sk, "remaining payload is shorter than advertised frame length, type=%llu", frame_type);
+                    HQ_PR_ERR(sk, "remaining packet payload is shorter than advertised frame length, type=%llu", frame_type);
                     return -EINVAL;
                 }
                 fskb = alloc_skb(frame_len, GFP_ATOMIC);
@@ -804,19 +811,26 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t re
     struct sk_buff *fskb;
     struct hyquic_rcv_cb *rcv_cb;
     struct hyquic_ctrlrecv_raw_frames_var *details;
-    uint32_t parsed_frame_content_length;
     uint32_t frame_len;
     uint8_t frame_type_len;
+    struct hyquic_frame_format_spec_inout ffs_params;
     int ret = 0;
 
     if (frame_details->format_specification_avail) {
         frame_type_len = quic_var_len(frame_details->frame_type);
-        ret = hyquic_parse_frame_content(sk, skb->data + frame_type_len, skb->len - frame_type_len, frame_details_cont->format_specification, frame_details->format_specification_avail, &parsed_frame_content_length);
+        ffs_params = (struct hyquic_frame_format_spec_inout) {.in = {
+            .frame_content = skb->data + frame_type_len,
+            .remaining_length = remaining_pack_len - frame_type_len,
+            .format_specification = frame_details_cont->format_specification,
+            .spec_length = frame_details->format_specification_avail
+        }};
+        ret = hyquic_parse_frame_content(sk, &ffs_params);
         if (ret)
             return ret;
-        frame_len = frame_type_len + parsed_frame_content_length;
+
+        frame_len = frame_type_len + ffs_params.out.parsed_length;
         if (frame_len > remaining_pack_len) {
-            HQ_PR_ERR(sk, "remaining payload is shorter than advertised frame length, type=%llu", frame_details->frame_type);
+            HQ_PR_ERR(sk, "remaining packet payload is shorter than advertised frame length, type=%llu", frame_details->frame_type);
             return -EINVAL;
         }
         fskb = alloc_skb(frame_len, GFP_ATOMIC);
