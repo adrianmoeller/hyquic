@@ -407,7 +407,6 @@ namespace hyquic
         void recv_loop()
         {
             int err = si::receive(sockfd, recv_ops, sock_recv_buff_size);
-            pr_pos("received=" + std::to_string(err));
             if (err < 0) {
                 if (err == -EAGAIN || err == -EWOULDBLOCK) {
                     recv_timer.expires_from_now(std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME));
@@ -443,7 +442,6 @@ namespace hyquic
 
         void handle_hyquic_ctrl_data(const buffer &buff, hyquic_ctrl_type data_type, const hyquic_ctrlrecv_info_details &details)
         {
-            pr_pos();
             assert(buff.len);
             switch (data_type)
             {

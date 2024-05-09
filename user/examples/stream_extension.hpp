@@ -96,7 +96,6 @@ namespace hyquic
                 break;
             }
 
-            pr_pos();
             container.send_one_frame(si::frame_to_send_container(frame.copy_all(), details.payload_length, details.retransmit_count + 1));
         }
 
@@ -131,7 +130,6 @@ namespace hyquic
 
         int send_msg(stream_data &msg)
         {
-            pr_pos();
             auto stream_fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg]() {
                 return prepare_send_stream(msg);
             }));
@@ -174,7 +172,6 @@ namespace hyquic
 
         stream_data recv_msg(uint32_t max_length)
         {
-            pr_pos();
             uint8_t tmp[max_length];
             outsized_buffer_view data_builder(tmp, max_length);
             std::shared_ptr<stream> current_stream;
@@ -220,24 +217,19 @@ namespace hyquic
                 handle_recv_flow_control(current_stream, recv_len);
             });
 
-            pr_pos();
             return stream_data(current_stream->id, flags, std::move(recv_data));
         }
 
         template<class Rep, class Period>
         std::optional<stream_data> recv_msg(uint32_t max_length, const std::chrono::duration<Rep, Period> &timeout)
         {
-            pr_pos();
-
             uint8_t tmp[max_length];
             outsized_buffer_view data_builder(tmp, max_length);
             std::shared_ptr<stream> current_stream;
             uint32_t flags = 0;
 
             if (!started_stream_data) {
-                pr_pos("wait with timeout");
                 started_stream_data = recv_buff.wait_pop_for(timeout);
-                pr_pos("wait done");
                 if (!started_stream_data)
                     return std::optional<stream_data>();
             }
@@ -278,7 +270,6 @@ namespace hyquic
             boost::asio::post(container.get_context(), [this, current_stream, recv_len = recv_data.len]() {
                 handle_recv_flow_control(current_stream, recv_len);
             });
-            pr_pos("after handle_recv_flow_control");
 
             return stream_data(current_stream->id, flags, std::move(recv_data));
         }
@@ -308,7 +299,6 @@ namespace hyquic
             frame_builder.push_var(type);
             frame_builder.push_var((max_streams >> 2) + 1);
 
-            pr_pos();
             return si::frame_to_send_container(frame_builder.trim());
         }
 
@@ -359,7 +349,6 @@ namespace hyquic
                 _stream->send.state = send_stream_state::SENT;
             }
 
-            pr_pos("payload=" + std::to_string(msg_len) + ", fin=" + std::to_string(flags & QUIC_STREAM_FLAG_FIN));
             return si::frame_to_send_container(std::move(frame_buff), msg_len);
         }
 
@@ -377,7 +366,6 @@ namespace hyquic
             if (stream_mng.send.stream_active == _stream->id)
                 stream_mng.send.stream_active = -1;
 
-            pr_pos();
             return si::frame_to_send_container(frame_builder.trim());
         }
 
@@ -390,7 +378,6 @@ namespace hyquic
             frame_builder.push_var(_stream->id);
             frame_builder.push_var(_stream->recv.max_bytes);
 
-            pr_pos("max_bytes=" + std::to_string(_stream->recv.max_bytes));
             return si::frame_to_send_container(frame_builder.trim());
         }
 
@@ -403,7 +390,6 @@ namespace hyquic
             frame_builder.push_var(_stream->id);
             frame_builder.push_var(_stream->send.max_bytes);
 
-            pr_pos("max_bytes=" + std::to_string(_stream->send.max_bytes));
             return si::frame_to_send_container(frame_builder.trim());
         }
 
@@ -436,7 +422,6 @@ namespace hyquic
                 frame_content.pull(payload_len)
             );
 
-            pr_pos("payload=" + std::to_string(payload_len) + ", offset=" + std::to_string(offset) + ", fin=" + std::to_string(type & stream_bit::FIN));
             do_reassembling(std::move(_stream_frame));
 
             return {start_len - frame_content.len, (uint32_t) payload_len};
@@ -444,7 +429,6 @@ namespace hyquic
 
         handle_frame_result process_reset_stream_frame(uint64_t type, buffer_view &frame_content)
         {
-            pr_pos();
             uint32_t start_len = frame_content.len;
             uint64_t stream_id;
             uint64_t err_code;
@@ -461,7 +445,6 @@ namespace hyquic
             std::shared_ptr<stream> _stream = get_val(stream_res);
             _stream->recv.state = recv_stream_state::RESET_RECVD;
             reassemble_list.remove_if([&_stream](const stream_frame &item) {
-                pr_pos();
                 return item._stream->id == _stream->id;
             });
 
@@ -470,7 +453,6 @@ namespace hyquic
 
         handle_frame_result process_stop_sending_frame(uint64_t type, buffer_view &frame_content)
         {
-            pr_pos();
             uint32_t start_len = frame_content.len;
             uint64_t stream_id;
             uint64_t err_code;
@@ -488,7 +470,6 @@ namespace hyquic
             _stream->send.state = send_stream_state::RESET_SENT;
 
             data_frames_to_send.frames.remove_if([&stream_id](const stream_frame_to_send_container &frame_to_send) {
-                pr_pos();
                 return frame_to_send._stream->id == stream_id;
             });
 
@@ -513,13 +494,11 @@ namespace hyquic
             if (max_bytes >= _stream->send.max_bytes)
                 _stream->send.max_bytes = max_bytes;
 
-            pr_pos("max_bytes=" + std::to_string(max_bytes));
             return {start_len - frame_content.len, 0};
         }
 
         handle_frame_result process_max_streams_uni_frame(uint64_t type, buffer_view &frame_content)
         {
-            pr_pos();
             uint32_t start_len = frame_content.len;
             uint64_t max_streams;
 
@@ -539,7 +518,6 @@ namespace hyquic
 
         handle_frame_result process_max_streams_bidi_frame(uint64_t type, buffer_view &frame_content)
         {
-            pr_pos();
             uint32_t start_len = frame_content.len;
             uint64_t max_streams;
 
@@ -572,7 +550,6 @@ namespace hyquic
             std::shared_ptr<stream> _stream = stream_mng.streams.at(stream_id);
             uint32_t window = _stream->recv.window;
 
-            pr_pos("max_bytes=" + std::to_string(max_bytes) + ", recv.bytes=" + std::to_string(_stream->recv.bytes));
             if (false /* TODO is under memory pressure */)
                 window >>= 1;
 
@@ -585,7 +562,6 @@ namespace hyquic
 
         handle_frame_result process_streams_blocked_uni_frame(uint64_t type, buffer_view &frame_content)
         {
-            pr_pos();
             uint32_t start_len = frame_content.len;
             uint64_t max_streams;
 
@@ -602,7 +578,6 @@ namespace hyquic
 
         handle_frame_result process_streams_blocked_bidi_frame(uint64_t type, buffer_view &frame_content)
         {
-            pr_pos();
             uint32_t start_len = frame_content.len;
             uint64_t max_streams;
 
@@ -619,7 +594,6 @@ namespace hyquic
 
         std::variant<std::shared_ptr<stream>, int> prepare_send_stream(stream_data &msg)
         {
-            pr_pos();
             if (msg.id == -1) {
                 if (stream_mng.send.stream_active == -1) {
                     msg.id = (stream_mng.send.streams_bidi << 2);
@@ -666,7 +640,6 @@ namespace hyquic
             uint64_t current_highest = 0;
             uint64_t current_offset;
 
-            pr_pos("payload=" + std::to_string(payload_len) + ", offset=" + std::to_string(frame.offset) + ", fin=" + std::to_string(frame.fin));
             if (_stream->recv.offset >= frame.offset + payload_len)
                 return;
 
@@ -736,13 +709,11 @@ namespace hyquic
                 frame._stream->recv.state = recv_stream_state::RECVD;
 
             frame._stream->recv.offset += frame.payload.len;
-            pr_pos("payload=" + std::to_string(frame.payload.len) + ", offset=" + std::to_string(frame.offset) + ", fin=" + std::to_string(frame.fin));
             recv_buff.push(std::move(frame));
         }
 
         void handle_recv_flow_control(std::shared_ptr<stream> _stream, uint32_t recv_len)
         {
-            pr_pos("received=" + std::to_string(recv_len));
             if (!recv_len)
 		        return;
 
@@ -764,7 +735,6 @@ namespace hyquic
             uint32_t payload_len = frame_to_send.frame_to_send.metadata.payload_length;
             std::shared_ptr<stream> _stream = frame_to_send._stream;
 
-            pr_pos("sent=" + std::to_string(payload_len));
             if (_stream->send.bytes + payload_len > _stream->send.max_bytes) {
                 if (!_stream->send.data_blocked && _stream->send.last_max_bytes < _stream->send.max_bytes) {
                     frames_to_send.push(create_stream_data_blocked_frame(_stream), _stream);
@@ -792,7 +762,6 @@ namespace hyquic
                 frames_to_send.transfer_one(data_frames_to_send);
             }
 
-            pr_pos("frames_sent=" + std::to_string(frames_to_send.size()));
             if (!frames_to_send.empty())
                 container.send_frames(frames_to_send);
         }

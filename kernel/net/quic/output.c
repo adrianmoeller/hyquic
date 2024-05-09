@@ -427,7 +427,6 @@ unlink:
 		outq->data_inflight -= snd_cb->data_bytes;
 		outq->inflight -= skb->len;
 		__skb_unlink(skb, head);
-		Q_PR_DEBUG(sk, "Removed, pn=%lli, type=%u", snd_cb->number, snd_cb->frame_type);
 		kfree_skb(skb);
 	}
 
