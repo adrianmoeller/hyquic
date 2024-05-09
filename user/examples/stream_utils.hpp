@@ -342,7 +342,8 @@ namespace hyquic
     si::frame_details_container stream_000_frame_details()
     {
         frame_format_specification_builder ffs;
-        ffs.add_backfill_component();
+        ffs.add_var_int_component();
+        ffs.add_backfill_component(true);
 
         return si::frame_details_container(
             0x08,
@@ -358,7 +359,8 @@ namespace hyquic
     si::frame_details_container stream_001_frame_details()
     {
         frame_format_specification_builder ffs;
-        ffs.add_backfill_component();
+        ffs.add_var_int_component();
+        ffs.add_backfill_component(true);
 
         return si::frame_details_container(
             0x09,
@@ -376,7 +378,7 @@ namespace hyquic
         frame_format_specification_builder ffs;
         ffs.add_var_int_component();
         uint8_t ref_id = ffs.add_var_int_component(true);
-        ffs.add_mult_const_decl_len_component(ref_id, 1);
+        ffs.add_mult_const_decl_len_component(ref_id, 1, true);
 
         return si::frame_details_container(
             0x0a,
@@ -394,7 +396,7 @@ namespace hyquic
         frame_format_specification_builder ffs;
         ffs.add_var_int_component();
         uint8_t ref_id = ffs.add_var_int_component(true);
-        ffs.add_mult_const_decl_len_component(ref_id, 1);
+        ffs.add_mult_const_decl_len_component(ref_id, 1, true);
 
         return si::frame_details_container(
             0x0b,
@@ -410,7 +412,9 @@ namespace hyquic
     si::frame_details_container stream_100_frame_details()
     {
         frame_format_specification_builder ffs;
-        ffs.add_backfill_component();
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+        ffs.add_backfill_component(true);
 
         return si::frame_details_container(
             0x0c,
@@ -426,7 +430,9 @@ namespace hyquic
     si::frame_details_container stream_101_frame_details()
     {
         frame_format_specification_builder ffs;
-        ffs.add_backfill_component();
+        ffs.add_var_int_component();
+        ffs.add_var_int_component();
+        ffs.add_backfill_component(true);
 
         return si::frame_details_container(
             0x0d,
@@ -445,7 +451,7 @@ namespace hyquic
         ffs.add_var_int_component();
         ffs.add_var_int_component();
         uint8_t ref_id = ffs.add_var_int_component(true);
-        ffs.add_mult_const_decl_len_component(ref_id, 1);
+        ffs.add_mult_const_decl_len_component(ref_id, 1, true);
 
         return si::frame_details_container(
             0x0e,
@@ -464,7 +470,7 @@ namespace hyquic
         ffs.add_var_int_component();
         ffs.add_var_int_component();
         uint8_t ref_id = ffs.add_var_int_component(true);
-        ffs.add_mult_const_decl_len_component(ref_id, 1);
+        ffs.add_mult_const_decl_len_component(ref_id, 1, true);
 
         return si::frame_details_container(
             0x0f,
