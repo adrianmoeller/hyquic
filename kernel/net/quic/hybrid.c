@@ -615,6 +615,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
                 if (!fskb)
                     return -ENOMEM;
                 quic_put_data(fskb->data, skb->data, frame_len);
+                QUIC_SND_CB(fskb)->data_bytes = ffs_params.out.parsed_payload;
                 __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
                 skb_pull(skb, frame_len);
                 len -= frame_len;
@@ -672,6 +673,37 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
 }
 
 /**
+ * Handles incoming flow control at connection level only.
+ * 
+ * @param sk quic socket
+ * @param freed_bytes amount of freed application data
+*/
+void hyquic_inq_flow_control(struct sock *sk, uint32_t freed_bytes)
+{
+    struct quic_inqueue *inq = quic_inq(sk);
+    struct sk_buff *nskb = NULL;
+    uint32_t window;
+
+    if (!freed_bytes)
+		return;
+
+    inq->bytes += freed_bytes;
+
+    if (inq->max_bytes - inq->bytes < inq->window / 2) {
+		window = inq->window;
+		if (sk_under_memory_pressure(sk))
+			window >>= 1;
+		inq->max_bytes = inq->bytes + window;
+		nskb = quic_frame_create(sk, QUIC_FRAME_MAX_DATA, inq);
+		if (nskb)
+			quic_outq_ctrl_tail(sk, nskb, true);
+	}
+
+    if (nskb)
+		quic_outq_transmit(sk);
+}
+
+/**
  * Processes the response of user-quic with length information of parsed frames unknown to kernel.
  * First, finds the deferred packet corresponding to the response.
  * Then, continues to parse its remaining frames.
@@ -711,6 +743,8 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlse
     
     skb_pull(cursor, ctrlsend_details->processed_length);
     HQ_PR_DEBUG(sk, "skipped %u bytes parsed by user-quic", ctrlsend_details->processed_length);
+
+    hyquic_inq_flow_control(sk, ctrlsend_details->processed_payload);
 
     if (ctrlsend_details->ack_eliciting) {
         ctrlrecv_details->ack_eliciting = true;
@@ -837,6 +871,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t re
         if (!fskb)
             return -ENOMEM;
         skb_put_data(fskb, skb->data, frame_len);
+        QUIC_SND_CB(fskb)->data_bytes = ffs_params.out.parsed_payload;
         __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
         ret = frame_len;
         HQ_PR_DEBUG(sk, "forwarding frame to user-quic, type=%llu, len=%u", frame_details->frame_type, frame_len);
@@ -961,12 +996,14 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
     struct sk_buff *skb, *fskb;
     struct hyquic_rcv_cb *rcv_cb;
     size_t length = 0;
+    uint32_t payload = 0;
 
     if (skb_queue_empty(head))
         return 0;
 
     skb_queue_walk(head, fskb) {
         length += fskb->len;
+        payload += QUIC_SND_CB(fskb)->data_bytes;
     }
 
     skb = alloc_skb(length, GFP_ATOMIC);
@@ -980,6 +1017,7 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
 
     rcv_cb = HYQUIC_RCV_CB(skb);
     rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_RAW_FRAMES_FIX;
+    rcv_cb->hyquic_ctrl_details.raw_frames_fix.payload = payload;
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);

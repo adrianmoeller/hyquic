@@ -58,7 +58,7 @@ public:
         return frame_details;
     }
 
-    uint32_t handle_frame(uint64_t type, buffer_view frame_content)
+    handle_frame_result handle_frame(uint64_t type, buffer_view frame_content)
     {
         uint64_t content;
         switch (type) {
@@ -68,7 +68,7 @@ public:
             std::lock_guard<std::mutex> lk(mut);
             frame_received = true;
             frame_cond.notify_all();
-            return 1;
+            return {1, 0};
         }
         case 0xb2: {
             uint8_t content_len = frame_content.pull_var(content);
@@ -76,10 +76,10 @@ public:
             std::lock_guard<std::mutex> lk(mut);
             frame_received = true;
             frame_cond.notify_all();
-            return content_len;
+            return {content_len, 0};
         }
         }
-        return 0;
+        return {0, 0};
     }
 
     void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details)

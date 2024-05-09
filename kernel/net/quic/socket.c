@@ -868,6 +868,9 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 				__skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred, skb);
 				break;
 			}
+			if (hyquic_rcv_cb->hyquic_ctrl_type == HYQUIC_CTRL_RAW_FRAMES_FIX)
+				freed += hyquic_rcv_cb->hyquic_ctrl_details.raw_frames_fix.payload;
+
 			kfree_skb(skb);
 			break;
 		}
@@ -892,6 +895,8 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 	if (!event && stream) {
 		sinfo.stream_id = stream->id;
 		quic_inq_flow_control(sk, stream, freed);
+	} else {
+		hyquic_inq_flow_control(sk, freed);
 	}
 	if (event || stream)
 		put_cmsg(msg, IPPROTO_QUIC, QUIC_STREAM_INFO, sizeof(sinfo), &sinfo);

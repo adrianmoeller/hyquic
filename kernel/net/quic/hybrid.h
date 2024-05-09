@@ -90,6 +90,7 @@ struct hyquic_rcv_cb {
     struct quic_rcv_cb common;
 	uint8_t hyquic_ctrl_type;
     union hyquic_ctrlrecv_info_details hyquic_ctrl_details;
+    uint32_t data_bytes;
 };
 
 #define HYQUIC_RCV_CB(__skb) ((struct hyquic_rcv_cb *)&((__skb)->cb[0]))
@@ -106,6 +107,7 @@ int hyquic_get_remote_transport_parameters_length(struct sock *sk, int len, char
 int hyquic_get_initial_mss(struct sock *sk, int len, char __user *optval, int __user *optlen);
 int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, uint64_t type, uint8_t **pp, uint32_t *plen);
 int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, uint8_t **pp, uint8_t *data);
+void hyquic_inq_flow_control(struct sock *sk, uint32_t freed_bytes);
 int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_ctrlsend_info *info);
 int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered);
 int hyquic_process_frame_copy(struct sock *sk, struct sk_buff *skb, uint32_t frame_content_len, uint64_t frame_type, uint8_t frame_type_len);

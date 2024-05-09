@@ -52,6 +52,12 @@ namespace hyquic
         }
     };
 
+    struct handle_frame_result
+    {
+        uint32_t content_len;
+        uint32_t payload_len = 0;
+    };
+
     class extension
     {
     protected:
@@ -60,7 +66,7 @@ namespace hyquic
 
         virtual inline buffer transport_parameter() = 0;
         virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
-        virtual uint32_t handle_frame(uint64_t type, buffer_view frame_content) = 0;
+        virtual handle_frame_result handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details) = 0;
         virtual void before_connection_initiation()
         {
@@ -449,8 +455,8 @@ namespace hyquic
                     assert(buff_view.pull_var(frame_type));
                     assert(extension_reg.contains(frame_type));
                     extension &ext = extension_reg.at(frame_type);
-                    uint32_t frame_content_len = ext.handle_frame(frame_type, buff_view);
-                    buff_view.prune(frame_content_len);
+                    handle_frame_result res = ext.handle_frame(frame_type, buff_view);
+                    buff_view.prune(res.content_len);
                 }
                 break;
             }
@@ -461,6 +467,7 @@ namespace hyquic
                 hyquic_ctrlsend_raw_frames_var parsing_results = {
                     .msg_id = details.raw_frames_var.msg_id,
                     .processed_length = 0,
+                    .processed_payload = 0,
                     .ack_eliciting = details.raw_frames_var.ack_eliciting,
                     .ack_immediate = details.raw_frames_var.ack_immediate,
                     .non_probing = details.raw_frames_var.non_probing
@@ -471,9 +478,10 @@ namespace hyquic
                 while (extension_reg.contains(frame_type)) {
                     extension &ext = extension_reg.at(frame_type);
                     const hyquic_frame_details &frame_details = frame_details_reg.at(frame_type);
-                    uint32_t frame_content_len = ext.handle_frame(frame_type, buff_view);
+                    handle_frame_result res = ext.handle_frame(frame_type, buff_view);
 
-                    parsing_results.processed_length += frame_type_len + frame_content_len;
+                    parsing_results.processed_length += frame_type_len + res.content_len;
+                    parsing_results.processed_payload += res.payload_len;
                     if (frame_details.ack_eliciting) {
                         parsing_results.ack_eliciting = true;
                         if (frame_details.ack_immediate)
@@ -482,7 +490,7 @@ namespace hyquic
                     if (frame_details.non_probing)
                         parsing_results.non_probing = true;
 
-                    buff_view.prune(frame_content_len);
+                    buff_view.prune(res.content_len);
                     if (buff_view.end())
                         break;
 

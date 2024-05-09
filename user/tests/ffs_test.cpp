@@ -110,7 +110,7 @@ public:
         return frame_details;
     }
 
-    uint32_t handle_frame(uint64_t type, buffer_view frame_content)
+    handle_frame_result handle_frame(uint64_t type, buffer_view frame_content)
     {
         std::lock_guard<std::mutex> lk(mut);
         frame_received = true;
@@ -121,14 +121,14 @@ public:
             uint64_t content;
             uint8_t content_len = frame_content.pull_var(content);
             BCE(content, 42);
-            return content_len;
+            return {content_len, 0};
         }
         case 0xb1: {
             uint32_t content0 = frame_content.pull_int<NETWORK>(4);
             BCE(content0, 42);
             uint32_t content1 = frame_content.pull_int<NETWORK>(1);
             BCE(content1, 21);
-            return 4 + 1;
+            return {4u + 1u, 0};
         }
         case 0xb2: {
             uint64_t content;
@@ -138,7 +138,7 @@ public:
             BCE(content0, 456);
             uint32_t content1 = frame_content.pull_int<NETWORK>(4);
             BCE(content1, 789);
-            return content_len + 3 + 3;
+            return {content_len + 3u + 3u, 0};
         }
         case 0xb3: {
             uint32_t content0 = frame_content.pull_int<NETWORK>(1);
@@ -149,7 +149,7 @@ public:
             uint64_t content2;
             uint8_t content2_len = frame_content.pull_var(content2);
             BCE(content2, 42);
-            return 1 + content1_len + content2_len;
+            return {1u + content1_len + content2_len, 0};
         }
         case 0xb4: {
             uint32_t content0 = frame_content.pull_int<NETWORK>(2);
@@ -157,10 +157,10 @@ public:
             uint32_t content1 = frame_content.pull_int<NETWORK>(4);
             BCE(content1, 123456);
             BCE(frame_content.end(), 0);
-            return 2 + 4;
+            return {2u + 4u, 0};
         }
         }
-        return 0;
+        return {0, 0};
     }
 
     void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details)

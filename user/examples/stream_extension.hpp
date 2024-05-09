@@ -46,7 +46,7 @@ namespace hyquic
             return frame_details;
         }
 
-        uint32_t handle_frame(uint64_t type, buffer_view frame_content) override
+        handle_frame_result handle_frame(uint64_t type, buffer_view frame_content) override
         {
             if ((type & stream_bit::MASK) == frame_type::STREAM) {
                 return process_stream_frame(type, frame_content);
@@ -73,7 +73,7 @@ namespace hyquic
                     break;
                 }
             }
-            return 0;
+            return {0, 0};
         }
 
         void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details) override
@@ -98,18 +98,6 @@ namespace hyquic
 
             pr_pos();
             container.send_one_frame(si::frame_to_send_container(frame.copy_all(), details.payload_length, details.retransmit_count + 1));
-        }
-
-        void before_connection_initiation() override
-        {
-            quic_transport_param local_tp = {
-                .remote = false,
-                .max_data = 0x7FFFFFFFFFFFFFFF // effectively disables connection-based flow control
-            };
-            socklen_t local_tp_len = sizeof(local_tp);
-
-            int err = container.set_socket_option(QUIC_SOCKOPT_TRANSPORT_PARAM, &local_tp, local_tp_len);
-            assert(!err);
         }
 
         void handshake_done() override
@@ -419,7 +407,7 @@ namespace hyquic
             return si::frame_to_send_container(frame_builder.trim());
         }
 
-        uint32_t process_stream_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_stream_frame(uint64_t type, buffer_view &frame_content)
         {
             uint32_t start_len = frame_content.len;
             uint64_t stream_id;
@@ -451,10 +439,10 @@ namespace hyquic
             pr_pos("payload=" + std::to_string(payload_len) + ", offset=" + std::to_string(offset) + ", fin=" + std::to_string(type & stream_bit::FIN));
             do_reassembling(std::move(_stream_frame));
 
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, (uint32_t) payload_len};
         }
 
-        uint32_t process_reset_stream_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_reset_stream_frame(uint64_t type, buffer_view &frame_content)
         {
             pr_pos();
             uint32_t start_len = frame_content.len;
@@ -477,10 +465,10 @@ namespace hyquic
                 return item._stream->id == _stream->id;
             });
 
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
-        uint32_t process_stop_sending_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_stop_sending_frame(uint64_t type, buffer_view &frame_content)
         {
             pr_pos();
             uint32_t start_len = frame_content.len;
@@ -505,10 +493,10 @@ namespace hyquic
             });
 
             ctrl_frames_to_send.push(std::move(reset_stream_frame), _stream);
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
-        uint32_t process_max_stream_data_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_max_stream_data_frame(uint64_t type, buffer_view &frame_content)
         {
             uint32_t start_len = frame_content.len;
             uint64_t stream_id;
@@ -526,10 +514,10 @@ namespace hyquic
                 _stream->send.max_bytes = max_bytes;
 
             pr_pos("max_bytes=" + std::to_string(max_bytes));
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
-        uint32_t process_max_streams_uni_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_max_streams_uni_frame(uint64_t type, buffer_view &frame_content)
         {
             pr_pos();
             uint32_t start_len = frame_content.len;
@@ -538,7 +526,7 @@ namespace hyquic
             frame_content.pull_var(max_streams);
 
             if (max_streams < stream_mng.send.max_streams_uni)
-                return start_len - frame_content.len;
+                return {start_len - frame_content.len, 0};
 
             stream_mng.send.max_streams_uni = max_streams;
             stream_mng.send.streams_uni = max_streams;
@@ -546,10 +534,10 @@ namespace hyquic
             std::lock_guard<std::mutex> lock(mutex);
             send_wait_cv.notify_all();
 
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
-        uint32_t process_max_streams_bidi_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_max_streams_bidi_frame(uint64_t type, buffer_view &frame_content)
         {
             pr_pos();
             uint32_t start_len = frame_content.len;
@@ -558,7 +546,7 @@ namespace hyquic
             frame_content.pull_var(max_streams);
 
             if (max_streams < stream_mng.send.max_streams_bidi)
-                return start_len - frame_content.len;
+                return {start_len - frame_content.len, 0};
 
             stream_mng.send.max_streams_bidi = max_streams;
             stream_mng.send.streams_bidi = max_streams;
@@ -566,10 +554,10 @@ namespace hyquic
             std::lock_guard<std::mutex> lock(mutex);
             send_wait_cv.notify_all();
 
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
-        uint32_t process_stream_data_blocked_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_stream_data_blocked_frame(uint64_t type, buffer_view &frame_content)
         {
             uint32_t start_len = frame_content.len;
             uint64_t stream_id;
@@ -592,10 +580,10 @@ namespace hyquic
 
             ctrl_frames_to_send.push(create_max_stream_data_frame(_stream), _stream);
 
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
-        uint32_t process_streams_blocked_uni_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_streams_blocked_uni_frame(uint64_t type, buffer_view &frame_content)
         {
             pr_pos();
             uint32_t start_len = frame_content.len;
@@ -604,15 +592,15 @@ namespace hyquic
             frame_content.pull_var(max_streams);
 
             if (max_streams < stream_mng.recv.max_streams_uni)
-                return start_len - frame_content.len;
+                return {start_len - frame_content.len, 0};
 
             ctrl_frames_to_send.push(create_max_streams_frame(frame_type::MAX_STREAMS_UNI, max_streams), 0);
             stream_mng.recv.max_streams_uni = max_streams;
 
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
-        uint32_t process_streams_blocked_bidi_frame(uint64_t type, buffer_view &frame_content)
+        handle_frame_result process_streams_blocked_bidi_frame(uint64_t type, buffer_view &frame_content)
         {
             pr_pos();
             uint32_t start_len = frame_content.len;
@@ -621,12 +609,12 @@ namespace hyquic
             frame_content.pull_var(max_streams);
 
             if (max_streams < stream_mng.recv.max_streams_bidi)
-                return start_len - frame_content.len;
+                return {start_len - frame_content.len, 0};
 
             ctrl_frames_to_send.push(create_max_streams_frame(frame_type::MAX_STREAMS_BIDI, max_streams), 0);
             stream_mng.recv.max_streams_bidi = max_streams;
 
-            return start_len - frame_content.len;
+            return {start_len - frame_content.len, 0};
         }
 
         std::variant<std::shared_ptr<stream>, int> prepare_send_stream(stream_data &msg)

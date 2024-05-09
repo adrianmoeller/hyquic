@@ -31,6 +31,7 @@ struct hyquic_ctrl_raw_frames {
 struct hyquic_ctrlsend_raw_frames_var {
 	uint64_t msg_id;
 	uint32_t processed_length;
+	uint32_t processed_payload;
 	uint8_t ack_eliciting:1;
 	uint8_t ack_immediate:1;
 	uint8_t non_probing:1;
@@ -46,6 +47,10 @@ struct hyquic_ctrlsend_info {
 		struct hyquic_ctrl_raw_frames raw_frames;
 		struct hyquic_ctrlsend_raw_frames_var raw_frames_var;
 	};
+};
+
+struct hyquic_ctrlrecv_raw_frames_fix {
+	uint32_t payload;
 };
 
 struct hyquic_ctrlrecv_raw_frames_var {
@@ -69,6 +74,7 @@ struct hyquic_ctrlrecv_mss_update {
 };
 
 union hyquic_ctrlrecv_info_details {
+	struct hyquic_ctrlrecv_raw_frames_fix raw_frames_fix;
 	struct hyquic_ctrlrecv_raw_frames_var raw_frames_var;
 	struct hyquic_ctrlrecv_lost_frames lost_frames;
 	struct hyquic_ctrlrecv_mss_update mss_update;
