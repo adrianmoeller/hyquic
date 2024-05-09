@@ -87,7 +87,7 @@ namespace hyquic
         friend class hyquic;
     };
 
-#define SOCK_RECV_TIMEOUT 10 // sec
+#define SOCK_RECV_TIMEOUT 2 // sec
 #define SOCK_RECV_BUFF_INIT_SIZE 1024
 #define SOCK_RECV_BUFF_MIN_SIZE 512
 #define SOCK_RECV_FAILURE_THRESHOLD 10
