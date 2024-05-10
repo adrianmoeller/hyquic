@@ -5,8 +5,10 @@ NC='\033[0m'
 EXIT_CODE=0
 THIS_DIR=$(dirname "$0")
 ADDITIONAL_ARGS=''
+TEMP_FILE=${THIS_DIR}/../build/benchmark.tmp
+QUIET=0
 
-while getopts "s:c:a:" opt; do
+while getopts "s:c:a:q" opt; do
     case ${opt} in
         s)
             SERVER_ARGS=${OPTARG}
@@ -16,6 +18,9 @@ while getopts "s:c:a:" opt; do
             ;;
         a)
             ADDITIONAL_ARGS=${OPTARG}
+            ;;
+        q)
+            QUIET=1
             ;;
         ?)
             exit 1
@@ -31,25 +36,25 @@ shift $(($OPTIND - 1))
 
 APP_EXEC="${THIS_DIR}/../build/$@"
 
-rm -f benchmark.tmp
-timeout -k 20s 240s ${APP_EXEC} server ${SERVER_ARGS} ${ADDITIONAL_ARGS} &> benchmark.tmp &
+rm -f ${TEMP_FILE}
+timeout -k 20s 240s ${APP_EXEC} server ${SERVER_ARGS} ${ADDITIONAL_ARGS} &> ${TEMP_FILE} &
 SERVER_PID=$!
 trap "kill ${SERVER_PID}; exit ${EXIT_CODE}" SIGINT
 sleep 1
 
-echo -e "${YELLOW}<Client>${NC}"
+[ "${QUIET}" == "1" ] || echo -e "${YELLOW}<Client>${NC}"
 ${APP_EXEC} client ${CLIENT_ARGS} ${ADDITIONAL_ARGS}
 CLIENT_EXIT_CODE=$?
 [ "${CLIENT_EXIT_CODE}" != "0" ] && EXIT_CODE=${CLIENT_EXIT_CODE}
 
-echo
-echo -e "${YELLOW}<Server>${NC}"
+[ "${QUIET}" == "1" ] || echo
+[ "${QUIET}" == "1" ] || echo -e "${YELLOW}<Server>${NC}"
 
 wait ${SERVER_PID}
 SERVER_EXIT_CODE=$?
 [ "${SERVER_EXIT_CODE}" != "0" ] && EXIT_CODE=${SERVER_EXIT_CODE}
 sleep 1
 
-cat benchmark.tmp
+[ "${QUIET}" == "1" ] || cat ${TEMP_FILE}
 
 exit ${EXIT_CODE}

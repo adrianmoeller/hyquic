@@ -90,7 +90,7 @@ namespace hyquic
 #define SOCK_RECV_TIMEOUT 2 // sec
 #define SOCK_RECV_BUFF_INIT_SIZE 1024
 #define SOCK_RECV_BUFF_MIN_SIZE 512
-#define SOCK_RECV_FAILURE_THRESHOLD 10
+#define SOCK_RECV_FAILURE_THRESHOLD 15
 #define SOCK_RECV_FAILURE_RECOVERY_TIME 200 // ms
 
     class hyquic
@@ -416,13 +416,9 @@ namespace hyquic
                 } else if (!running) {
                     return;
                 } else {
-                    printf("  Warning: socket receive failed (%i).\n", err);
-
                     sock_recv_failures_in_row++;
                     if (sock_recv_failures_in_row > SOCK_RECV_FAILURE_THRESHOLD) {
-                        printf("  Socket receive failed %u times in a row. Terminating.\n", sock_recv_failures_in_row);
-                        return;
-                        // throw network_error("Socket receive failed " + std::to_string(sock_recv_failures_in_row) + " times in a row.", err);
+                        throw network_error("Socket receive failed " + std::to_string(sock_recv_failures_in_row) + " times in a row.", err);
                     } else {
                         recv_timer.expires_from_now(std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME * (long) std::pow(2, sock_recv_failures_in_row)));
                         recv_timer.async_wait([this](const auto& e) {
