@@ -6,7 +6,6 @@ EXIT_CODE=0
 THIS_DIR=$(dirname "$0")
 ADDITIONAL_ARGS=''
 TEMP_FILE=${THIS_DIR}/../build/benchmark.tmp
-QUIET=0
 
 while getopts "s:c:a:q" opt; do
     case ${opt} in
@@ -18,9 +17,6 @@ while getopts "s:c:a:q" opt; do
             ;;
         a)
             ADDITIONAL_ARGS=${OPTARG}
-            ;;
-        q)
-            QUIET=1
             ;;
         ?)
             exit 1
@@ -42,19 +38,18 @@ SERVER_PID=$!
 trap "kill ${SERVER_PID}; exit ${EXIT_CODE}" SIGINT
 sleep 1
 
-[ "${QUIET}" == "1" ] || echo -e "${YELLOW}<Client>${NC}"
+echo -e "${YELLOW}<Client>${NC}"
 ${APP_EXEC} client ${CLIENT_ARGS} ${ADDITIONAL_ARGS}
 CLIENT_EXIT_CODE=$?
 [ "${CLIENT_EXIT_CODE}" != "0" ] && EXIT_CODE=${CLIENT_EXIT_CODE}
+sleep 3
 
-[ "${QUIET}" == "1" ] || echo
-[ "${QUIET}" == "1" ] || echo -e "${YELLOW}<Server>${NC}"
+echo
+echo -e "${YELLOW}<Server>${NC}"
 
-wait ${SERVER_PID}
-SERVER_EXIT_CODE=$?
-[ "${SERVER_EXIT_CODE}" != "0" ] && EXIT_CODE=${SERVER_EXIT_CODE}
+pkill ${SERVER_PID}
 sleep 1
 
-[ "${QUIET}" == "1" ] || cat ${TEMP_FILE}
+cat ${TEMP_FILE}
 
 exit ${EXIT_CODE}

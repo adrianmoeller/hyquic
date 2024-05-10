@@ -21,6 +21,8 @@ static inline void pr_final_bandwidth(double bandwidth)
 {
 #ifdef SEND_PROGRESS_INTERVAL
     std::cout << "Bandwidth: " << bandwidth << " KBytes/sec" << std::endl;
+#else
+    std::cout << bandwidth << std::endl;
 #endif
 }
 
@@ -40,7 +42,7 @@ static inline void pr_recv_progress(uint64_t recvd_bytes)
 #endif
 }
 
-int do_client_stream_ext(int argc, char *argv[], double &bandwidth)
+int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us)
 {
     if (argc < 3) {
         std::cout << "Error: invalid argument count." << std::endl;
@@ -97,17 +99,14 @@ int do_client_stream_ext(int argc, char *argv[], double &bandwidth)
     }
 
     auto elapsed = std::chrono::steady_clock::now() - start_time;
-    double elapsed_sec = elapsed.count() / 1000 / 1000 / 1000;
-    double total_len_kb = TOTAL_LEN / 1024;
-    bandwidth = total_len_kb / elapsed_sec;
-    pr_final_bandwidth(bandwidth);
+    elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
 
     client.close();
 
     return 0;
 }
 
-int do_client_no_ext(int argc, char *argv[], double &bandwidth)
+int do_client_no_ext(int argc, char *argv[], int64_t &elapsed_us)
 {
     if (argc < 3) {
         std::cout << "Error: invalid argument count." << std::endl;
@@ -160,17 +159,14 @@ int do_client_no_ext(int argc, char *argv[], double &bandwidth)
     }
 
     auto elapsed = std::chrono::steady_clock::now() - start_time;
-    double elapsed_sec = elapsed.count() / 1000 / 1000 / 1000;
-    double total_len_kb = TOTAL_LEN / 1024;
-    bandwidth = total_len_kb / elapsed_sec;
-    pr_final_bandwidth(bandwidth);
+    elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
 
     client.close();
 
     return 0;
 }
 
-int do_client_kern(int argc, char *argv[], double &bandwidth)
+int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
 {
 	struct sockaddr_in ra = {};
 	uint64_t sent_bytes = 0, sid = 0;
@@ -236,10 +232,7 @@ int do_client_kern(int argc, char *argv[], double &bandwidth)
 	}
 	
     auto elapsed = std::chrono::steady_clock::now() - start_time;
-    double elapsed_sec = elapsed.count() / 1000 / 1000 / 1000;
-    double total_len_kb = TOTAL_LEN / 1024;
-    bandwidth = total_len_kb / elapsed_sec;
-    pr_final_bandwidth(bandwidth);
+    elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
 
 	close(sockfd);
 	return 0;
@@ -252,19 +245,18 @@ int do_client(int argc, char *argv[])
         return -EINVAL;
     }
 
-    double bandwidth = 0.0;
+    int64_t elapsed_us = 0;
     int ret;
 
     if (!strcmp(argv[4], "ext"))
-        ret = do_client_stream_ext(argc, argv, bandwidth);
+        ret = do_client_stream_ext(argc, argv, elapsed_us);
     else if (!strcmp(argv[4], "non"))
-        ret = do_client_no_ext(argc, argv, bandwidth);
+        ret = do_client_no_ext(argc, argv, elapsed_us);
     else
-        ret = do_client_kern(argc, argv, bandwidth);
+        ret = do_client_kern(argc, argv, elapsed_us);
 
-#ifndef SEND_PROGRESS_INTERVAL
-    std::cout << argv[4] << "," << argv[5] << "," << bandwidth << std::endl;
-#endif
+    double total_len_kb = TOTAL_LEN / 1024;
+    pr_final_bandwidth(total_len_kb * 1000 * 1000 / elapsed_us);
 
     return ret;
 }
@@ -277,41 +269,44 @@ int do_server_stream_ext(int argc, char *argv[])
     }
 
     hyquic_server server(argv[2], atoi(argv[3]));
-    hyquic_server_connection connection = server.accept_connection();
-
-    stream_extension ext(connection, true);
-    connection.register_extension(ext);
-
-    connection.connect_to_client(argv[4], argv[5]);
-
-    uint64_t recv_bytes = 0;
-    int err;
 
     while (true) {
-        std::optional<stream_data> recv_msg = ext.recv_msg(RECV_MSG_LEN, std::chrono::seconds(20));
-        if (!recv_msg) {
-            std::cout << "Error: receive msg failed (timeout)." << std::endl;
-            return -1;
+        hyquic_server_connection connection = server.accept_connection();
+
+        stream_extension ext(connection, true);
+        connection.register_extension(ext);
+
+        connection.connect_to_client(argv[4], argv[5]);
+
+        uint64_t recv_bytes = 0;
+        int err;
+
+        while (true) {
+            std::optional<stream_data> recv_msg = ext.recv_msg(RECV_MSG_LEN, std::chrono::seconds(20));
+            if (!recv_msg) {
+                std::cout << "Error: receive msg failed (timeout)." << std::endl;
+                return -1;
+            }
+
+            recv_bytes += recv_msg->buff.len;
+            pr_recv_progress(recv_bytes);
+
+            // usleep(20);
+
+            if (recv_msg->flags & QUIC_STREAM_FLAG_FIN)
+                break;
         }
 
-        recv_bytes += recv_msg->buff.len;
-        pr_recv_progress(recv_bytes);
+        stream_data send_msg(0, QUIC_STREAM_FLAG_FIN, buffer("Reception done."));
+        err = ext.send_msg(send_msg);
+        if (err < 0) {
+            std::cout << "Error: send msg failed (" << err << ")." << std::endl;
+            return err;
+        }
 
-        // usleep(20);
-
-        if (recv_msg->flags & QUIC_STREAM_FLAG_FIN)
-            break;
+        sleep(1);
+        connection.close();
     }
-
-    stream_data send_msg(0, QUIC_STREAM_FLAG_FIN, buffer("Reception done."));
-    err = ext.send_msg(send_msg);
-    if (err < 0) {
-        std::cout << "Error: send msg failed (" << err << ")." << std::endl;
-        return err;
-    }
-
-    sleep(1);
-    connection.close();
 
     return 0;
 }
@@ -324,38 +319,41 @@ int do_server_no_ext(int argc, char *argv[])
     }
 
     hyquic_server server(argv[2], atoi(argv[3]));
-    hyquic_server_connection connection = server.accept_connection();
-
-    connection.connect_to_client(argv[4], argv[5]);
-
-    uint64_t recv_bytes = 0;
-    int err;
 
     while (true) {
-        std::optional<stream_data> recv_msg = connection.receive_msg(std::chrono::seconds(20));
-        if (!recv_msg) {
-            std::cout << "Error: receive msg failed (timeout)." << std::endl;
-            return -1;
+        hyquic_server_connection connection = server.accept_connection();
+
+        connection.connect_to_client(argv[4], argv[5]);
+
+        uint64_t recv_bytes = 0;
+        int err;
+
+        while (true) {
+            std::optional<stream_data> recv_msg = connection.receive_msg(std::chrono::seconds(20));
+            if (!recv_msg) {
+                std::cout << "Error: receive msg failed (timeout)." << std::endl;
+                return -1;
+            }
+
+            recv_bytes += recv_msg->buff.len;
+            pr_recv_progress(recv_bytes);
+
+            // usleep(20);
+
+            if (recv_msg->flags & QUIC_STREAM_FLAG_FIN)
+                break;
         }
 
-        recv_bytes += recv_msg->buff.len;
-        pr_recv_progress(recv_bytes);
+        stream_data send_msg(0, QUIC_STREAM_FLAG_FIN, buffer("Reception done."));
+        err = connection.send_msg(send_msg);
+        if (err < 0) {
+            std::cout << "Error: send msg failed (" << err << ")." << std::endl;
+            return err;
+        }
 
-        // usleep(20);
-
-        if (recv_msg->flags & QUIC_STREAM_FLAG_FIN)
-            break;
+        sleep(1);
+        connection.close();
     }
-
-    stream_data send_msg(0, QUIC_STREAM_FLAG_FIN, buffer("Reception done."));
-    err = connection.send_msg(send_msg);
-    if (err < 0) {
-        std::cout << "Error: send msg failed (" << err << ")." << std::endl;
-        return err;
-    }
-
-    sleep(1);
-    connection.close();
 
     return 0;
 }
@@ -366,7 +364,7 @@ int do_server_kern(int argc, char *argv[])
 	struct sockaddr_storage ra = {};
 	struct sockaddr_in la = {};
 	uint32_t flag = 0, addrlen;
-	uint64_t recv_bytes = 0,  sid = 0;
+	uint64_t recv_bytes = 0, sid = 0;
 	int ret, sockfd, listenfd;
 
 	la.sin_family = AF_INET;
@@ -387,42 +385,44 @@ int do_server_kern(int argc, char *argv[])
 		return -1;
 	}
 
-	addrlen = sizeof(ra);
-	sockfd = accept(listenfd, (struct sockaddr *)&ra, &addrlen);
-	if (sockfd < 0) {
-		printf("Error: socket accept failed %d\n", sockfd);
-		return -1;
-	}
+    while (true) {
+        addrlen = sizeof(ra);
+        sockfd = accept(listenfd, (struct sockaddr *)&ra, &addrlen);
+        if (sockfd < 0) {
+            printf("Error: socket accept failed %d\n", sockfd);
+            return -1;
+        }
 
-	if (quic_server_handshake(sockfd, argv[4], argv[5])) {
-        printf("Error: handshake failed\n");
-		return -1;
+        if (quic_server_handshake(sockfd, argv[4], argv[5])) {
+            printf("Error: handshake failed\n");
+            return -1;
+        }
+
+        while (true) {
+            ret = quic_recvmsg(sockfd, &rcv_msg, RECV_MSG_LEN, &sid, &flag);
+            if (ret < 0) {
+                printf("Error: receive failed %d\n", ret);
+                return ret;
+            }
+            recv_bytes += ret;
+
+            usleep(20);
+            pr_recv_progress(recv_bytes);
+
+            if (flag & QUIC_STREAM_FLAG_FIN)
+                break;
+        }
+
+        flag = QUIC_STREAM_FLAG_FIN;
+        strcpy(snd_msg, "Reception done.");
+        ret = quic_sendmsg(sockfd, snd_msg, strlen(snd_msg), sid, flag);
+        if (ret < 0) {
+            printf("Error: send failed %d\n", ret);
+            return ret;
+        }
+        sleep(1);
+        close(sockfd);
     }
-
-	while (1) {
-		ret = quic_recvmsg(sockfd, &rcv_msg, RECV_MSG_LEN, &sid, &flag);
-		if (ret < 0) {
-			printf("Error: receive failed %d\n", ret);
-			return ret;
-		}
-		recv_bytes += ret;
-
-        usleep(20);
-        pr_recv_progress(recv_bytes);
-
-		if (flag & QUIC_STREAM_FLAG_FIN)
-			break;
-	}
-
-	flag = QUIC_STREAM_FLAG_FIN;
-	strcpy(snd_msg, "Reception done.");
-	ret = quic_sendmsg(sockfd, snd_msg, strlen(snd_msg), sid, flag);
-	if (ret < 0) {
-		printf("Error: send failed %d\n", ret);
-		return ret;
-	}
-	sleep(1);
-	close(sockfd);
 
 	return 0;
 }
@@ -434,9 +434,9 @@ int do_server(int argc, char *argv[])
         return -EINVAL;
     }
 
-    if (!strcmp(argv[7], "ext"))
+    if (!strcmp(argv[6], "ext"))
         return do_server_stream_ext(argc, argv);
-    else if (!strcmp(argv[7], "non"))
+    else if (!strcmp(argv[6], "non"))
         return do_server_no_ext(argc, argv);
     else
         return do_server_kern(argc, argv);
@@ -444,6 +444,11 @@ int do_server(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+    if (argc < 2) {
+        std::cout << "Error: invalid argument count." << std::endl;
+        return -EINVAL;
+    }
+
     if (!strcmp(argv[1], "client")) {
 		return do_client(argc, argv);
     } else {
