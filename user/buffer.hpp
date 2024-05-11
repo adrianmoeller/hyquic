@@ -415,6 +415,12 @@ namespace hyquic
             return std::move(value);
         }
 
+        size_t size()
+        {
+            std::lock_guard<std::mutex> lock(mut);
+            return internal_queue.size();
+        }
+
     private:
         std::mutex mut;
         std::condition_variable cv;

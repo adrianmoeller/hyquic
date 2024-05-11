@@ -406,7 +406,8 @@ int do_server_kern(int argc, char *argv[])
             }
             recv_bytes += ret;
 
-            usleep(20);
+            // usleep(20);
+            
             pr_recv_progress(recv_bytes);
 
             if (flag & QUIC_STREAM_FLAG_FIN)

@@ -1012,6 +1012,7 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
     fskb = __skb_dequeue(head);
     while (fskb) {
         skb_put_data(skb, fskb->data, fskb->len);
+        kfree_skb(fskb);
         fskb = __skb_dequeue(head);
     }
 

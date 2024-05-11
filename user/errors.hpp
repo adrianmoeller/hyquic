@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <variant>
+#include <boost/stacktrace.hpp>
 
 namespace hyquic
 {
@@ -39,11 +40,13 @@ namespace hyquic
         explicit error(std::string msg)
             : msg(msg)
         {
+            std::cerr << boost::stacktrace::stacktrace() << std::endl;
         }
 
         explicit error(std::string msg, int err_no)
             : msg(std::string(strerror(err_no)) + ": " + msg)
         {
+            std::cerr << boost::stacktrace::stacktrace() << std::endl;
         }
 
         inline const char* what() const noexcept
