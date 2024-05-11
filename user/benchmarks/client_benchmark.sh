@@ -9,9 +9,9 @@ CLIENT_ARGS="127.0.0.1 1234"
 REPETITIONS=10
 MODES=('kern' 'non' 'ext')
 
-echo "client_mode,kbyte_per_sec"
+echo "server_mode,client_mode,kbyte_per_sec"
 for client_mode in "${MODES[@]}"; do
 for ((i = 0 ; i < ${REPETITIONS} ; i++)); do
-    echo "${client_mode},$(${BUILD_DIR}/bandwidth client ${CLIENT_ARGS} ${client_mode})"
+    echo "$1,${client_mode},$(${BUILD_DIR}/bandwidth client ${CLIENT_ARGS} ${client_mode})"
 done
 done
