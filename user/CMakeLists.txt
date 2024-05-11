@@ -50,6 +50,8 @@ add_test(stream_ext_test0 ${SERVER_CLIENT_TEST_RUNNER} -a "non non" stream_ext_t
 add_test(stream_ext_test1 ${SERVER_CLIENT_TEST_RUNNER} -a "ext non" stream_ext_test)
 add_test(stream_ext_test2 ${SERVER_CLIENT_TEST_RUNNER} -a "non ext" stream_ext_test)
 add_test(stream_ext_test3 ${SERVER_CLIENT_TEST_RUNNER} -a "ext ext" stream_ext_test)
+add_test(stream_ext_test4 ${SERVER_CLIENT_TEST_RUNNER} -a "non ext_noffs" stream_ext_test)
+add_test(stream_ext_test5 ${SERVER_CLIENT_TEST_RUNNER} -a "ext_noffs non" stream_ext_test)
 
 # BENCHMARKING
 

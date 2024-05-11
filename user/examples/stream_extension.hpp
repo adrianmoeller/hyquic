@@ -21,13 +21,13 @@ namespace hyquic
     class stream_extension : public extension
     {
     public:
-        stream_extension(hyquic &container, bool is_server)
+        stream_extension(hyquic &container, bool is_server, bool omit_ffs = false)
             : container(container), is_server(is_server)
         {
             stream_mng.is_server = is_server;
             stream_mng.send = {};
             stream_mng.recv = {};
-            create_stream_frame_details(frame_details);
+            create_stream_frame_details(frame_details, omit_ffs);
         }
 
         inline buffer transport_parameter()

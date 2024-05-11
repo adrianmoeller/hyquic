@@ -42,7 +42,7 @@ static inline void pr_recv_progress(uint64_t recvd_bytes)
 #endif
 }
 
-int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us)
+int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us, bool omit_ffs)
 {
     if (argc < 3) {
         std::cout << "Error: invalid argument count." << std::endl;
@@ -51,7 +51,7 @@ int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us)
 
     hyquic_client client(argv[2], atoi(argv[3]));
 
-    stream_extension ext(client, false);
+    stream_extension ext(client, false, omit_ffs);
     client.register_extension(ext);
 
     client.connect_to_server();
@@ -104,6 +104,16 @@ int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us)
     client.close();
 
     return 0;
+}
+
+int do_client_stream_ext_no_ffs(int argc, char *argv[], int64_t &elapsed_us)
+{
+    return do_client_stream_ext(argc, argv, elapsed_us, true);
+}
+
+int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us)
+{
+    return do_client_stream_ext(argc, argv, elapsed_us, false);
 }
 
 int do_client_no_ext(int argc, char *argv[], int64_t &elapsed_us)
@@ -248,12 +258,18 @@ int do_client(int argc, char *argv[])
     int64_t elapsed_us = 0;
     int ret;
 
-    if (!strcmp(argv[4], "ext"))
+    if (!strcmp(argv[4], "ext_noffs"))
+        ret = do_client_stream_ext_no_ffs(argc, argv, elapsed_us);
+    else if (!strcmp(argv[4], "ext"))
         ret = do_client_stream_ext(argc, argv, elapsed_us);
     else if (!strcmp(argv[4], "non"))
         ret = do_client_no_ext(argc, argv, elapsed_us);
-    else
+    else if (!strcmp(argv[4], "kern"))
         ret = do_client_kern(argc, argv, elapsed_us);
+    else {
+        std::cout << "Error: unsupported client mode." << std::endl;
+        return -EINVAL;
+    }
 
     double total_len_kb = TOTAL_LEN / 1024;
     pr_final_bandwidth(total_len_kb * 1000 * 1000 / elapsed_us);
@@ -261,7 +277,7 @@ int do_client(int argc, char *argv[])
     return ret;
 }
 
-int do_server_stream_ext(int argc, char *argv[])
+int do_server_stream_ext(int argc, char *argv[], bool omit_ffs)
 {
     if (argc < 5) {
         std::cout << "Error: invalid argument count." << std::endl;
@@ -273,7 +289,7 @@ int do_server_stream_ext(int argc, char *argv[])
     while (true) {
         hyquic_server_connection connection = server.accept_connection();
 
-        stream_extension ext(connection, true);
+        stream_extension ext(connection, true, omit_ffs);
         connection.register_extension(ext);
 
         connection.connect_to_client(argv[4], argv[5]);
@@ -309,6 +325,16 @@ int do_server_stream_ext(int argc, char *argv[])
     }
 
     return 0;
+}
+
+int do_server_stream_ext_no_ffs(int argc, char *argv[])
+{
+    return do_server_stream_ext(argc, argv, true);
+}
+
+int do_server_stream_ext(int argc, char *argv[])
+{
+    return do_server_stream_ext(argc, argv, false);
 }
 
 int do_server_no_ext(int argc, char *argv[])
@@ -435,12 +461,17 @@ int do_server(int argc, char *argv[])
         return -EINVAL;
     }
 
+    if (!strcmp(argv[6], "ext_noffs"))
+        return do_server_stream_ext_no_ffs(argc, argv);
     if (!strcmp(argv[6], "ext"))
         return do_server_stream_ext(argc, argv);
     else if (!strcmp(argv[6], "non"))
         return do_server_no_ext(argc, argv);
-    else
+    else if (!strcmp(argv[6], "kern"))
         return do_server_kern(argc, argv);
+
+    std::cout << "Error: unsupported server mode." << std::endl;
+    return -EINVAL;
 }
 
 int main(int argc, char *argv[])

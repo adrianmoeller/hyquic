@@ -11,13 +11,13 @@ using namespace hyquic;
 #define BCE(L,R) BOOST_CHECK_EQUAL(L,R)
 #define BAZ(expr) BOOST_CHECK_EQUAL(expr,0)
 
-void test_client_stream_ext(int argc, char *argv[])
+void test_client_stream_ext(int argc, char *argv[], bool omit_ffs)
 {
     BOOST_ASSERT(argc >= 3);
 
     hyquic_client client(argv[2], atoi(argv[3]));
 
-    stream_extension ext(client, false);
+    stream_extension ext(client, false, omit_ffs);
     client.register_extension(ext);
 
     client.connect_to_server();
@@ -33,6 +33,16 @@ void test_client_stream_ext(int argc, char *argv[])
     BCE((char*) msg_received->buff.data, "Hello, HyQUIC client!");
 
     client.close();
+}
+
+void test_client_stream_ext_no_ffs(int argc, char *argv[])
+{
+    test_client_stream_ext(argc, argv, true);
+}
+
+void test_client_stream_ext(int argc, char *argv[])
+{
+    test_client_stream_ext(argc, argv, false);
 }
 
 void test_client_no_ext(int argc, char *argv[])
@@ -57,20 +67,24 @@ void test_client(int argc, char *argv[])
 {
     BOOST_ASSERT(argc >= 5);
 
-    if (!strcmp(argv[4], "ext"))
+    if (!strcmp(argv[4], "ext_noffs"))
+        test_client_stream_ext_no_ffs(argc, argv);
+    else if (!strcmp(argv[4], "ext"))
         test_client_stream_ext(argc, argv);
-    else
+    else if (!strcmp(argv[4], "non"))
         test_client_no_ext(argc, argv);
+    else
+        BOOST_ASSERT_MSG(false, "unsupported client mode");
 }
 
-void test_server_stream_ext(int argc, char *argv[])
+void test_server_stream_ext(int argc, char *argv[], bool omit_ffs)
 {
     BOOST_ASSERT(argc >= 5);
 
     hyquic_server server(argv[2], atoi(argv[3]));
     hyquic_server_connection connection = server.accept_connection();
 
-    stream_extension ext(connection, true);
+    stream_extension ext(connection, true, omit_ffs);
     connection.register_extension(ext);
 
     connection.connect_to_client(argv[4], argv[5]);
@@ -86,6 +100,16 @@ void test_server_stream_ext(int argc, char *argv[])
     BCE(ext.send_msg(send_data), msg_to_send_len);
 
     connection.close();
+}
+
+void test_server_stream_ext_no_ffs(int argc, char *argv[])
+{
+    test_server_stream_ext(argc, argv, true);
+}
+
+void test_server_stream_ext(int argc, char *argv[])
+{
+    test_server_stream_ext(argc, argv, false);
 }
 
 void test_server_no_ext(int argc, char *argv[])
@@ -112,10 +136,14 @@ void test_server(int argc, char *argv[])
 {
     BOOST_ASSERT(argc >= 7);
 
-    if (!strcmp(argv[7], "ext"))
+    if (!strcmp(argv[7], "ext_noffs"))
+        test_server_stream_ext_no_ffs(argc, argv);
+    else if (!strcmp(argv[7], "ext"))
         test_server_stream_ext(argc, argv);
-    else
+    else if (!strcmp(argv[7], "non"))
         test_server_no_ext(argc, argv);
+    else
+        BOOST_ASSERT_MSG(false, "unsupported server mode");
 }
 
 BOOST_AUTO_TEST_CASE(sample_test)
