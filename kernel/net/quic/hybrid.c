@@ -586,6 +586,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
     struct hyquic_frame_details *frame_details;
     struct hyquic_frame_format_spec_inout ffs_params;
     struct hyquic_ctrlrecv_raw_frames_var *ctrl_details = &HYQUIC_RCV_CB(skb)->hyquic_ctrl_details.raw_frames_var;
+    bool deferred_again = false;
 
     while (len > 0)
     {
@@ -617,13 +618,17 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
                 quic_put_data(fskb->data, skb->data, frame_len);
                 QUIC_SND_CB(fskb)->data_bytes = ffs_params.out.parsed_payload;
                 __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
+                deferred_again = true;
+
                 skb_pull(skb, frame_len);
                 len -= frame_len;
+
                 HQ_PR_DEBUG(sk, "forwarding frame to user-quic, type=%llu", frame_type);
             } else {
-                __skb_queue_tail(&sk->sk_receive_queue, fskb);
+                __skb_queue_tail(&sk->sk_receive_queue, skb);
                 sk->sk_data_ready(sk);
                 len = 0;
+
                 HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu", frame_type);
             }
 
@@ -636,7 +641,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
                 ctrl_details->non_probing = 1;
         } else {
             if (frame_type > QUIC_FRAME_MAX) {
-                pr_err_once("[QUIC] %s unsupported frame %llu\n", __func__, frame_type);
+                HQ_PR_ERR(sk, "unsupported frame type %llu", frame_type);
                 return -EPROTONOSUPPORT;
             } else if (!frame_type) { /* skip padding */
                 skb_pull(skb, len);
@@ -667,6 +672,9 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
     }
 
     hyquic_flush_unkwn_frames_inqueue(sk);
+
+    if (!deferred_again)
+        kfree_skb(skb);
 
     HQ_PR_DEBUG(sk, "done");
     return 0;
