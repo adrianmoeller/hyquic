@@ -76,7 +76,7 @@ namespace hyquic
             return {0, 0};
         }
 
-        void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details) override
+        void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const lost_frame_metadata &metadata) override
         {
             switch (type)
             {
@@ -96,7 +96,9 @@ namespace hyquic
                 break;
             }
 
-            container.send_one_frame(si::frame_to_send_container(frame.copy_all(), details.payload_length, details.retransmit_count + 1));
+            lost_frames_to_resend.push(si::frame_to_send_container(frame.copy_all(), metadata.payload_length, metadata.retransmit_count + 1));
+            if (metadata.last_frame)
+                container.send_frames(lost_frames_to_resend);
         }
 
         void handshake_done() override
@@ -280,6 +282,7 @@ namespace hyquic
         std::vector<si::frame_details_container> frame_details;
         stream_frames_to_send_provider ctrl_frames_to_send;
         stream_frames_to_send_provider data_frames_to_send;
+        si::default_frames_to_send_provider lost_frames_to_resend;
 
         std::mutex mutex;
         std::condition_variable send_wait_cv;

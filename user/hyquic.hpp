@@ -58,6 +58,13 @@ namespace hyquic
         uint32_t payload_len = 0;
     };
 
+    struct lost_frame_metadata
+    {
+        uint32_t payload_length;
+        uint8_t retransmit_count;
+        bool last_frame;
+    };
+
     class extension
     {
     protected:
@@ -67,7 +74,7 @@ namespace hyquic
         virtual inline buffer transport_parameter() = 0;
         virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
         virtual handle_frame_result handle_frame(uint64_t type, buffer_view frame_content) = 0;
-        virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details) = 0;
+        virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const lost_frame_metadata &metadata) = 0;
         virtual void before_connection_initiation()
         {
             // NO-OP
@@ -497,14 +504,28 @@ namespace hyquic
                 break;
             }
             case HYQUIC_CTRL_LOST_FRAMES: {
-                const buffer_view buff_view(buff);
-                buffer_view buff_view_content(buff);
-                uint64_t frame_type;
+                buffer_view cursor(buff);
 
-                assert(buff_view_content.pull_var(frame_type));
-                assert(extension_reg.contains(frame_type));
-                extension &ext = extension_reg.at(frame_type);
-                ext.handle_lost_frame(frame_type, buff_view_content, buff_view, details.lost_frames);
+                while (!cursor.end()) {
+                    hyquic_lost_frame_metadata metadata = cursor.pull<hyquic_lost_frame_metadata>();
+                    assert(cursor.len >= metadata.frame_length);
+
+                    const buffer_view frame_cursor(cursor.data, metadata.frame_length);
+                    buffer_view content_cursor(frame_cursor);
+
+                    cursor.prune(metadata.frame_length);
+                    const lost_frame_metadata ext_metadata{
+                        .payload_length = metadata.payload_length,
+                        .retransmit_count = metadata.retransmit_count,
+                        .last_frame = cursor.end()
+                    };
+
+                    uint64_t frame_type;
+                    assert(content_cursor.pull_var(frame_type));
+                    assert(extension_reg.contains(frame_type));
+                    extension &ext = extension_reg.at(frame_type);
+                    ext.handle_lost_frame(frame_type, content_cursor, frame_cursor, ext_metadata);
+                }
                 break;
             }
             case HYQUIC_CTRL_MSS_UPDATE: {

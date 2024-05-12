@@ -1478,7 +1478,8 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, bool *var_fr
 		len -= ret;
 	}
 
-	hyquic_flush_unkwn_frames_inqueue(sk);
+	if (quic_hyquic(sk)->enabled)
+		hyquic_flush_unkwn_frames_inqueue(sk);
 
 	return 0;
 }

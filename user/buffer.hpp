@@ -152,6 +152,21 @@ namespace hyquic
             return copied;
         }
 
+        template<typename T>
+        inline T pull()
+        {
+            uint32_t len = sizeof(T);
+
+            if (this->len < len)
+                throw buffer_error("Buffer read overflow.");
+
+            T val;
+            memcpy(&val, this->data, len);
+            this->data += len;
+            this->len -= len;
+            return std::move(val);
+        }
+
         inline uint8_t pull_var(uint64_t &val)
         {
             if (end())

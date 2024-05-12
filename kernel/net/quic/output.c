@@ -537,6 +537,10 @@ int quic_outq_retransmit_mark(struct sock *sk, u8 level, u8 immediate)
 			quic_outq_set_window(outq, quic_cong_window(cong));
 		}
 	}
+	
+	if (quic_hyquic(sk)->enabled)
+		hyquic_flush_lost_frames_inqueue(sk);
+
 	quic_outq_update_loss_timer(sk, level);
 	return count;
 }

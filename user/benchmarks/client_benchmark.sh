@@ -29,16 +29,16 @@ while getopts "r:m:l:" opt; do
 done
 
 if [[ -n ${LOSS} ]]; then
-    echo "add loss ${LOSS}"
+    echo "  add loss ${LOSS}"
     tc qdisc add dev lo root netem loss ${LOSS}
-    trap "echo 'remove loss ${LOSS}'; tc qdisc del dev lo root netem loss ${LOSS}; exit 1" SIGINT
+    trap "echo '  remove loss ${LOSS}'; tc qdisc del dev lo root netem loss ${LOSS}; exit 1" SIGINT
 fi
 
 echo "server_mode,client_mode,kbyte_per_sec"
 for client_mode in "${CLIENT_MODES[@]}"; do
 for ((i = 0 ; i < ${REPETITIONS} ; i++)); do
     if [[ -n ${LOSS} ]]; then
-        echo "${SERVER_MODE},${client_mode},$(${BUILD_DIR}/bandwidth ${CLIENT_ARGS} -m ${client_mode} -t 1048576 -l 1024)"
+        echo "${SERVER_MODE},${client_mode},$(${BUILD_DIR}/bandwidth ${CLIENT_ARGS} -m ${client_mode} -t 134217728)" # 128 * 1024 * 1024
     else
         echo "${SERVER_MODE},${client_mode},$(${BUILD_DIR}/bandwidth ${CLIENT_ARGS} -m ${client_mode})"
     fi
@@ -46,6 +46,6 @@ done
 done
 
 if [[ -n ${LOSS} ]]; then
-    echo "remove loss ${LOSS}"
+    echo "  remove loss ${LOSS}"
     tc qdisc del dev lo root netem loss ${LOSS}
 fi

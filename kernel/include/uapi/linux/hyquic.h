@@ -135,6 +135,19 @@ struct hyquic_frame_to_send_metadata {
 };
 
 /**
+ * Metadata attached to a lost frame sent back to user-quic.
+ * 
+ * @frame_length: length of frame
+ * @payload_length: length of payload in bytes contained in a frame. May be 0 if frame is a control frame
+ * @retransmit_count: number of times frame has been retransmitted. 0 if frame is new
+*/
+struct hyquic_lost_frame_metadata {
+	uint32_t frame_length;
+	uint32_t payload_length;
+	uint8_t retransmit_count;
+};
+
+/**
  * Type of frame format specification component.
 */
 enum hyquic_frame_format_spec_component_type {

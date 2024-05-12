@@ -82,7 +82,7 @@ public:
         return {0, 0};
     }
 
-    void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const hyquic_ctrlrecv_lost_frames &details)
+    void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const lost_frame_metadata &metadata)
     {
         BAZ(container.send_one_frame(si::frame_to_send_container(frame.copy(frame.len))));
     }

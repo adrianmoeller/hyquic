@@ -66,6 +66,7 @@ int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
     skb_queue_head_init(&hyquic->usrquic_frames_outqueue);
     skb_queue_head_init(&hyquic->unkwn_frames_fix_inqueue);
     skb_queue_head_init(&hyquic->unkwn_frames_var_deferred);
+    skb_queue_head_init(&hyquic->lost_usrquic_frames_inqueue);
     if (hyquic_frame_details_table_init(&hyquic->frame_details_table))
         return -ENOMEM;
 
@@ -123,6 +124,7 @@ void hyquic_free(struct hyquic_container *hyquic)
     __skb_queue_purge(&hyquic->usrquic_frames_outqueue);
     __skb_queue_purge(&hyquic->unkwn_frames_fix_inqueue);
     __skb_queue_purge(&hyquic->unkwn_frames_var_deferred);
+    __skb_queue_purge(&hyquic->lost_usrquic_frames_inqueue);
     hyquic_frame_details_table_free(&hyquic->frame_details_table);
 
     HQ_PR_DEBUG(hyquic->sk, "done");
@@ -511,7 +513,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
         snd_cb->common.stream = stream;
     }
 
-    HQ_PR_DEBUG(sk, "done, type=%llu, len=%u", frame_type, metadata.frame_length);
+    HQ_PR_DEBUG(sk, "done, type=%llu, len=%u, rtx=%u", frame_type, metadata.frame_length, metadata.retransmit_count);
     return skb;
 }
 
@@ -784,7 +786,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlse
         }
     }
 
-    HQ_PR_DEBUG(sk, "done, msg_id=%llu", ctrlsend_details->msg_id);
+    HQ_PR_DEBUG(sk, "done, msg_id=%u", ctrlsend_details->msg_id);
     return 0;
 }
 
@@ -1066,15 +1068,61 @@ int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
             rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_LOST_FRAMES;
             rcv_cb->hyquic_ctrl_details.lost_frames.payload_length = QUIC_SND_CB(fskb)->data_bytes;
             rcv_cb->hyquic_ctrl_details.lost_frames.retransmit_count = QUIC_SND_CB(fskb)->sent_count;
-
-            __skb_queue_tail(&sk->sk_receive_queue, skb);
-            sk->sk_data_ready(sk);
+            __skb_queue_tail(&hyquic->lost_usrquic_frames_inqueue, skb);
 
             HQ_PR_DEBUG(sk, "forwarded to user-quic, type=%u", QUIC_SND_CB(fskb)->frame_type);
             return 1;
         }
     }
 
+    return 0;
+}
+
+/**
+ * Collects all lost frames waiting to be send back to user-quic and puts them to the receive queue.
+ * 
+ * @param sk quic socket
+ * @return negative error code if not successful, otherwise 0
+*/
+int hyquic_flush_lost_frames_inqueue(struct sock *sk)
+{
+    struct sk_buff_head *head = &quic_hyquic(sk)->lost_usrquic_frames_inqueue;
+    struct sk_buff *skb, *fskb;
+    struct hyquic_rcv_cb *rcv_cb;
+    struct hyquic_lost_frame_metadata metadata;
+    size_t length = 0;
+
+    if (skb_queue_empty(head))
+        return 0;
+
+    skb_queue_walk(head, fskb) {
+        length += fskb->len + sizeof(struct hyquic_lost_frame_metadata);
+    }
+
+    skb = alloc_skb(length, GFP_ATOMIC);
+    if (!skb)
+        return -ENOMEM;
+    fskb = __skb_dequeue(head);
+    while (fskb) {
+        rcv_cb = HYQUIC_RCV_CB(fskb);
+        metadata = (struct hyquic_lost_frame_metadata) {
+            .frame_length = fskb->len,
+            .payload_length = rcv_cb->hyquic_ctrl_details.lost_frames.payload_length,
+            .retransmit_count = rcv_cb->hyquic_ctrl_details.lost_frames.retransmit_count
+        };
+        skb_put_data(skb, &metadata, sizeof(struct hyquic_lost_frame_metadata));
+        skb_put_data(skb, fskb->data, fskb->len);
+        kfree_skb(fskb);
+        fskb = __skb_dequeue(head);
+    }
+
+    rcv_cb = HYQUIC_RCV_CB(skb);
+    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_LOST_FRAMES;
+
+    __skb_queue_tail(&sk->sk_receive_queue, skb);
+    sk->sk_data_ready(sk);
+
+    HQ_PR_DEBUG(sk, "done");
     return 0;
 }
 

@@ -33,6 +33,7 @@ struct hyquic_transport_param {
  * @usrquic_frames_outqueue: frames from user-quic ready to be sent to peer
  * @unkwn_frames_fix_inqueue: frames of known length from peer ready to be sent to user-quic
  * @unkwn_frames_var_deferred: remaining frames of a packet from peer deferred to be processed because of unknown frame length
+ * @lost_usrquic_frames_inqueue: lost user-quic frames ready to be sent back to user-quic
  * @frame_details_table: mapping of frame type to frame details
  * @last_max_payload: last value of maximum packet payload length
  * @last_max_payload_dgram: last value of maximum packet payload length for datagrams
@@ -49,6 +50,7 @@ struct hyquic_container {
     struct sk_buff_head usrquic_frames_outqueue;
     struct sk_buff_head unkwn_frames_fix_inqueue;
     struct sk_buff_head unkwn_frames_var_deferred;
+    struct sk_buff_head lost_usrquic_frames_inqueue;
     struct quic_hash_table frame_details_table;
 
     uint32_t last_max_payload;
@@ -114,6 +116,7 @@ inline void hyquic_frame_var_notify_sack_timer_started(struct sock *sk);
 inline void hyquic_frame_var_notify_ack_sent(struct sock *sk);
 int hyquic_flush_unkwn_frames_inqueue(struct sock *sk);
 int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb);
+int hyquic_flush_lost_frames_inqueue(struct sock *sk);
 int hyquic_handle_mss_update(struct sock *sk, struct quic_packet *packet);
 
 #endif /* __QUIC_HYBRID_H__ */
