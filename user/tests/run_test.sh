@@ -23,11 +23,11 @@ while getopts "s:c:a:" opt; do
     esac
 done
 
-[ "${SERVER_ARGS}" != "" ] || exit 1
-[ "${CLIENT_ARGS}" != "" ] || exit 1
+[ "${SERVER_ARGS}" == "" ] && exit 1
+[ "${CLIENT_ARGS}" == "" ] && exit 1
 
 shift $(($OPTIND - 1))
-[ "$@" != "" ] || exit 1
+[ "$@" == "" ] && exit 1
 
 APP_EXEC="${THIS_DIR}/../build/$@"
 

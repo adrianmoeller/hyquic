@@ -17,6 +17,20 @@ using namespace hyquic;
 char snd_msg[SEND_MSG_LEN];
 char rcv_msg[RECV_MSG_LEN];
 
+static char default_address[] = "0.0.0.0";
+static char default_port[] = "1234";
+
+static struct {
+	char *address = default_address;
+	char *port = default_port;
+    char *pkey = nullptr;
+	char *cert = nullptr;
+    bool server = false;
+    char *mode = nullptr;
+    uint64_t send_msg_len = SEND_MSG_LEN;
+    uint64_t total_len = TOTAL_LEN;
+} options;
+
 static inline void pr_final_bandwidth(double bandwidth)
 {
 #ifdef SEND_PROGRESS_INTERVAL
@@ -29,27 +43,65 @@ static inline void pr_final_bandwidth(double bandwidth)
 static inline void pr_send_progress(uint64_t sent_bytes)
 {
 #ifdef SEND_PROGRESS_INTERVAL
-    if (!(sent_bytes % (SEND_MSG_LEN * 1024 * SEND_PROGRESS_INTERVAL)))
-		std::cout << "Sent " << sent_bytes / 1024 << "/" << TOTAL_LEN / 1024 << " KBytes." << std::endl;
+    if (!(sent_bytes % (options.send_msg_len * 1024 * SEND_PROGRESS_INTERVAL)))
+		std::cout << "Sent " << sent_bytes / 1024 << "/" << options.total_len / 1024 << " KBytes." << std::endl;
 #endif
 }
 
 static inline void pr_recv_progress(uint64_t recvd_bytes)
 {
 #ifdef RECV_PROGRESS_INTERVAL
-    if (!(recvd_bytes % (SEND_MSG_LEN * 1024 * RECV_PROGRESS_INTERVAL)))
-		std::cout << "Received " << recvd_bytes / 1024 << "/" << TOTAL_LEN / 1024 << " KBytes." << std::endl;
+    if (!(recvd_bytes % (options.send_msg_len * 1024 * RECV_PROGRESS_INTERVAL)))
+		std::cout << "Received " << recvd_bytes / 1024 << "/" << options.total_len / 1024 << " KBytes." << std::endl;
 #endif
 }
 
-int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us, bool omit_ffs)
+static int get_options(int argc, char *argv[])
 {
-    if (argc < 3) {
-        std::cout << "Error: invalid argument count." << std::endl;
-        return -EINVAL;
+    while (true) {
+        switch (getopt(argc, argv, "sa:p:k:c:m:l:t:")) {
+        case 's':
+            options.server = true;
+            continue;
+        case 'a':
+            options.address = optarg;
+            continue;
+        case 'p':
+            options.port = optarg;
+            continue;
+        case 'k':
+            options.pkey = optarg;
+            continue;
+        case 'c':
+            options.cert = optarg;
+            continue;
+        case 'm':
+            options.mode = optarg;
+            continue;
+        case 'l':
+            options.send_msg_len = atoll(optarg);
+            continue;
+        case 't':
+            options.total_len = atoll(optarg);
+            continue;
+        case '?':
+            std::cout << "Error: invalid argument." << std::endl;
+            return -EINVAL;
+        case -1:
+            break;
+        default:
+            break;
+        }
+
+        break;
     }
 
-    hyquic_client client(argv[2], atoi(argv[3]));
+    return 0;
+}
+
+static int do_client_stream_ext(int64_t &elapsed_us, bool omit_ffs)
+{
+    hyquic_client client(options.address, atoi(options.port));
 
     stream_extension ext(client, false, omit_ffs);
     client.register_extension(ext);
@@ -58,7 +110,7 @@ int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us, bool omit_
 
     int err;
     uint64_t sent_bytes;
-    stream_data send_msg(0, 0, buffer(SEND_MSG_LEN));
+    stream_data send_msg(0, 0, buffer(options.send_msg_len));
 
     auto start_time = std::chrono::steady_clock::now();
 
@@ -80,7 +132,7 @@ int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us, bool omit_
         sent_bytes += err;
         pr_send_progress(sent_bytes);
         
-        if (sent_bytes > TOTAL_LEN - SEND_MSG_LEN)
+        if (sent_bytes > options.total_len - options.send_msg_len)
             break;
     }
 
@@ -106,29 +158,24 @@ int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us, bool omit_
     return 0;
 }
 
-int do_client_stream_ext_no_ffs(int argc, char *argv[], int64_t &elapsed_us)
+static int do_client_stream_ext_no_ffs(int64_t &elapsed_us)
 {
-    return do_client_stream_ext(argc, argv, elapsed_us, true);
+    return do_client_stream_ext(elapsed_us, true);
 }
 
-int do_client_stream_ext(int argc, char *argv[], int64_t &elapsed_us)
+static int do_client_stream_ext(int64_t &elapsed_us)
 {
-    return do_client_stream_ext(argc, argv, elapsed_us, false);
+    return do_client_stream_ext(elapsed_us, false);
 }
 
-int do_client_no_ext(int argc, char *argv[], int64_t &elapsed_us)
+static int do_client_no_ext(int64_t &elapsed_us)
 {
-    if (argc < 3) {
-        std::cout << "Error: invalid argument count." << std::endl;
-        return -EINVAL;
-    }
-
-    hyquic_client client(argv[2], atoi(argv[3]));
+    hyquic_client client(options.address, atoi(options.port));
     client.connect_to_server();
 
     int err;
     uint64_t sent_bytes = 0;
-    stream_data send_msg(0, 0, buffer(SEND_MSG_LEN));
+    stream_data send_msg(0, 0, buffer(options.send_msg_len));
 
     auto start_time = std::chrono::steady_clock::now();
 
@@ -150,7 +197,7 @@ int do_client_no_ext(int argc, char *argv[], int64_t &elapsed_us)
         sent_bytes += err;
         pr_send_progress(sent_bytes);
 
-        if (sent_bytes > TOTAL_LEN - SEND_MSG_LEN)
+        if (sent_bytes > options.total_len - options.send_msg_len)
             break;
     }
 
@@ -176,7 +223,7 @@ int do_client_no_ext(int argc, char *argv[], int64_t &elapsed_us)
     return 0;
 }
 
-int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
+static int do_client_kern(int64_t &elapsed_us)
 {
 	struct sockaddr_in ra = {};
 	uint64_t sent_bytes = 0, sid = 0;
@@ -191,8 +238,8 @@ int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
 	}
 
     ra.sin_family = AF_INET;
-    ra.sin_port = htons(atoi(argv[3]));
-    inet_pton(AF_INET, argv[2], &ra.sin_addr.s_addr);
+    ra.sin_port = htons(atoi(options.port));
+    inet_pton(AF_INET, options.address, &ra.sin_addr.s_addr);
 
 	if (connect(sockfd, (struct sockaddr *)&ra, sizeof(ra))) {
 		printf("Error: socket connect failed\n");
@@ -207,7 +254,7 @@ int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
 	auto start_time = std::chrono::steady_clock::now();
 
 	flag = QUIC_STREAM_FLAG_NEW;
-	ret = quic_sendmsg(sockfd, snd_msg, SEND_MSG_LEN, sid, flag);
+	ret = quic_sendmsg(sockfd, snd_msg, options.send_msg_len, sid, flag);
 	if (ret < 0) {
 		printf("Error: send failed %d\n", ret);
 		return ret;
@@ -215,7 +262,7 @@ int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
 	sent_bytes += ret;
 	flag = 0;
 	while (true) {
-		ret = quic_sendmsg(sockfd, snd_msg, SEND_MSG_LEN, sid, flag);
+		ret = quic_sendmsg(sockfd, snd_msg, options.send_msg_len, sid, flag);
 		if (ret < 0) {
 			printf("Error: send failed %d\n", ret);
 			return ret;
@@ -223,11 +270,11 @@ int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
 		sent_bytes += ret;
 		pr_send_progress(sent_bytes);
 
-		if (sent_bytes > TOTAL_LEN - SEND_MSG_LEN)
+		if (sent_bytes > options.total_len - options.send_msg_len)
 			break;
 	}
 	flag = QUIC_STREAM_FLAG_FIN;
-	ret = quic_sendmsg(sockfd, snd_msg, SEND_MSG_LEN, sid, flag);
+	ret = quic_sendmsg(sockfd, snd_msg, options.send_msg_len, sid, flag);
 	if (ret < 0) {
 		printf("Error: send failed %d\n", ret);
 		return ret;
@@ -235,7 +282,7 @@ int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
 	sent_bytes += ret;
 
 	memset(rcv_msg, 0, sizeof(rcv_msg));
-	ret = quic_recvmsg(sockfd, rcv_msg, SEND_MSG_LEN * 16, &sid, &flag);
+	ret = quic_recvmsg(sockfd, rcv_msg, options.send_msg_len * 16, &sid, &flag);
 	if (ret < 0) {
 		printf("Error: receive failed %d\n", ret);
 		return ret;
@@ -248,43 +295,33 @@ int do_client_kern(int argc, char *argv[], int64_t &elapsed_us)
 	return 0;
 }
 
-int do_client(int argc, char *argv[])
+static int do_client()
 {
-    if (argc < 5) {
-        std::cout << "Error: invalid argument count." << std::endl;
-        return -EINVAL;
-    }
-
     int64_t elapsed_us = 0;
     int ret;
 
-    if (!strcmp(argv[4], "ext_noffs"))
-        ret = do_client_stream_ext_no_ffs(argc, argv, elapsed_us);
-    else if (!strcmp(argv[4], "ext"))
-        ret = do_client_stream_ext(argc, argv, elapsed_us);
-    else if (!strcmp(argv[4], "non"))
-        ret = do_client_no_ext(argc, argv, elapsed_us);
-    else if (!strcmp(argv[4], "kern"))
-        ret = do_client_kern(argc, argv, elapsed_us);
+    if (!strcmp(options.mode, "ext_noffs"))
+        ret = do_client_stream_ext_no_ffs(elapsed_us);
+    else if (!strcmp(options.mode, "ext"))
+        ret = do_client_stream_ext(elapsed_us);
+    else if (!strcmp(options.mode, "non"))
+        ret = do_client_no_ext(elapsed_us);
+    else if (!strcmp(options.mode, "kern"))
+        ret = do_client_kern(elapsed_us);
     else {
         std::cout << "Error: unsupported client mode." << std::endl;
         return -EINVAL;
     }
 
-    double total_len_kb = TOTAL_LEN / 1024;
+    double total_len_kb = options.total_len / 1024;
     pr_final_bandwidth(total_len_kb * 1000 * 1000 / elapsed_us);
 
     return ret;
 }
 
-int do_server_stream_ext(int argc, char *argv[], bool omit_ffs)
+static int do_server_stream_ext(bool omit_ffs)
 {
-    if (argc < 5) {
-        std::cout << "Error: invalid argument count." << std::endl;
-        return -EINVAL;
-    }
-
-    hyquic_server server(argv[2], atoi(argv[3]));
+    hyquic_server server(options.address, atoi(options.port));
 
     while (true) {
         hyquic_server_connection connection = server.accept_connection();
@@ -292,7 +329,7 @@ int do_server_stream_ext(int argc, char *argv[], bool omit_ffs)
         stream_extension ext(connection, true, omit_ffs);
         connection.register_extension(ext);
 
-        connection.connect_to_client(argv[4], argv[5]);
+        connection.connect_to_client(options.pkey, options.cert);
 
         uint64_t recv_bytes = 0;
         int err;
@@ -327,29 +364,24 @@ int do_server_stream_ext(int argc, char *argv[], bool omit_ffs)
     return 0;
 }
 
-int do_server_stream_ext_no_ffs(int argc, char *argv[])
+static int do_server_stream_ext_no_ffs()
 {
-    return do_server_stream_ext(argc, argv, true);
+    return do_server_stream_ext(true);
 }
 
-int do_server_stream_ext(int argc, char *argv[])
+static int do_server_stream_ext()
 {
-    return do_server_stream_ext(argc, argv, false);
+    return do_server_stream_ext(false);
 }
 
-int do_server_no_ext(int argc, char *argv[])
+static int do_server_no_ext()
 {
-    if (argc < 5) {
-        std::cout << "Error: invalid argument count." << std::endl;
-        return -EINVAL;
-    }
-
-    hyquic_server server(argv[2], atoi(argv[3]));
+    hyquic_server server(options.address, atoi(options.port));
 
     while (true) {
         hyquic_server_connection connection = server.accept_connection();
 
-        connection.connect_to_client(argv[4], argv[5]);
+        connection.connect_to_client(options.pkey, options.cert);
 
         uint64_t recv_bytes = 0;
         int err;
@@ -384,7 +416,7 @@ int do_server_no_ext(int argc, char *argv[])
     return 0;
 }
 
-int do_server_kern(int argc, char *argv[])
+static int do_server_kern()
 {
 	struct quic_transport_param param = {};
 	struct sockaddr_storage ra = {};
@@ -394,8 +426,8 @@ int do_server_kern(int argc, char *argv[])
 	int ret, sockfd, listenfd;
 
 	la.sin_family = AF_INET;
-	la.sin_port = htons(atoi(argv[3]));
-	inet_pton(AF_INET, argv[2], &la.sin_addr.s_addr);
+	la.sin_port = htons(atoi(options.port));
+	inet_pton(AF_INET, options.address, &la.sin_addr.s_addr);
 	listenfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_QUIC);
 	if (listenfd < 0) {
 		printf("Error: socket create failed\n");
@@ -419,7 +451,7 @@ int do_server_kern(int argc, char *argv[])
             return -1;
         }
 
-        if (quic_server_handshake(sockfd, argv[4], argv[5])) {
+        if (quic_server_handshake(sockfd, options.pkey, options.cert)) {
             printf("Error: handshake failed\n");
             return -1;
         }
@@ -454,21 +486,16 @@ int do_server_kern(int argc, char *argv[])
 	return 0;
 }
 
-int do_server(int argc, char *argv[])
+static int do_server()
 {
-    if (argc < 7) {
-        std::cout << "Error: invalid argument count." << std::endl;
-        return -EINVAL;
-    }
-
-    if (!strcmp(argv[6], "ext_noffs"))
-        return do_server_stream_ext_no_ffs(argc, argv);
-    if (!strcmp(argv[6], "ext"))
-        return do_server_stream_ext(argc, argv);
-    else if (!strcmp(argv[6], "non"))
-        return do_server_no_ext(argc, argv);
-    else if (!strcmp(argv[6], "kern"))
-        return do_server_kern(argc, argv);
+    if (!strcmp(options.mode, "ext_noffs"))
+        return do_server_stream_ext_no_ffs();
+    if (!strcmp(options.mode, "ext"))
+        return do_server_stream_ext();
+    else if (!strcmp(options.mode, "non"))
+        return do_server_no_ext();
+    else if (!strcmp(options.mode, "kern"))
+        return do_server_kern();
 
     std::cout << "Error: unsupported server mode." << std::endl;
     return -EINVAL;
@@ -476,14 +503,12 @@ int do_server(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-    if (argc < 2) {
-        std::cout << "Error: invalid argument count." << std::endl;
-        return -EINVAL;
-    }
+    if (get_options(argc, argv))
+        return 1;
 
-    if (!strcmp(argv[1], "client")) {
-		return do_client(argc, argv);
+    if (options.server) {
+	    return do_server();
     } else {
-	    return do_server(argc, argv);
+		return do_client();
     }
 }

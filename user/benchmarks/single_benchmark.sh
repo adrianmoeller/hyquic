@@ -33,13 +33,13 @@ shift $(($OPTIND - 1))
 APP_EXEC="${THIS_DIR}/../build/$@"
 
 rm -f ${TEMP_FILE}
-timeout -k 20s 240s ${APP_EXEC} server ${SERVER_ARGS} ${ADDITIONAL_ARGS} &> ${TEMP_FILE} &
+timeout -k 20s 240s ${APP_EXEC} -s ${SERVER_ARGS} ${ADDITIONAL_ARGS} &> ${TEMP_FILE} &
 SERVER_PID=$!
 trap "kill ${SERVER_PID}; exit ${EXIT_CODE}" SIGINT
 sleep 1
 
 echo -e "${YELLOW}<Client>${NC}"
-${APP_EXEC} client ${CLIENT_ARGS} ${ADDITIONAL_ARGS}
+${APP_EXEC} ${CLIENT_ARGS} ${ADDITIONAL_ARGS}
 CLIENT_EXIT_CODE=$?
 [ "${CLIENT_EXIT_CODE}" != "0" ] && EXIT_CODE=${CLIENT_EXIT_CODE}
 sleep 3
