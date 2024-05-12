@@ -745,7 +745,7 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlse
         }
     }
     if (!found) {
-        HQ_PR_ERR(sk, "cannot find deferred packet payload, msg_id=%llu", ctrlsend_details->msg_id);
+        HQ_PR_ERR(sk, "cannot find deferred packet payload, msg_id=%u", ctrlsend_details->msg_id);
         return -EINVAL;
     }
     
@@ -904,7 +904,7 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t re
         __skb_queue_tail(&sk->sk_receive_queue, fskb);
         sk->sk_data_ready(sk);
         *var_frame_encountered = true;
-        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu, len=%u, msg_id=%llu", frame_details->frame_type, remaining_pack_len, details->msg_id);
+        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu, len=%u, msg_id=%u", frame_details->frame_type, remaining_pack_len, details->msg_id);
     }
 
     if (frame_details->ack_eliciting) {

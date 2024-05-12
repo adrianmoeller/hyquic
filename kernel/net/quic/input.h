@@ -48,7 +48,7 @@ struct quic_rcv_cb {
 	struct quic_stream *stream;
 	u64 offset; /* stream or crypto offset */
 	u32 errcode;
-	u16 read_offset;
+	u32 read_offset;
 	u16 udph_offset;
 	u8 number_offset;
 	u8 event;

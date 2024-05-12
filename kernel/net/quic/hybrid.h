@@ -45,7 +45,7 @@ struct hyquic_container {
     struct list_head transport_params_remote;
     struct list_head transport_params_local;
 
-    uint64_t next_ic_msg_id;
+    uint32_t next_ic_msg_id;
     struct sk_buff_head usrquic_frames_outqueue;
     struct sk_buff_head unkwn_frames_fix_inqueue;
     struct sk_buff_head unkwn_frames_var_deferred;
@@ -90,7 +90,6 @@ struct hyquic_rcv_cb {
     struct quic_rcv_cb common;
 	uint8_t hyquic_ctrl_type;
     union hyquic_ctrlrecv_info_details hyquic_ctrl_details;
-    uint32_t data_bytes;
 };
 
 #define HYQUIC_RCV_CB(__skb) ((struct hyquic_rcv_cb *)&((__skb)->cb[0]))

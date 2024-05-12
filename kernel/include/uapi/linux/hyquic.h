@@ -29,7 +29,7 @@ struct hyquic_ctrl_raw_frames {
 };
 
 struct hyquic_ctrlsend_raw_frames_var {
-	uint64_t msg_id;
+	uint32_t msg_id;
 	uint32_t processed_length;
 	uint32_t processed_payload;
 	uint8_t ack_eliciting:1;
@@ -54,7 +54,7 @@ struct hyquic_ctrlrecv_raw_frames_fix {
 };
 
 struct hyquic_ctrlrecv_raw_frames_var {
-	uint64_t msg_id;
+	uint32_t msg_id;
 	uint8_t ack_eliciting:1;
 	uint8_t ack_immediate:1;
 	uint8_t ack_sent:1;
