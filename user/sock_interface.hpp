@@ -55,12 +55,12 @@ namespace si
         return close(sockfd);
     }
 
-    struct frame_details_container
+    struct frame_profile_container
     {
-        hyquic_frame_details frame_details;
+        hyquic_frame_profile frame_profile;
         buffer format_specification;
 
-        frame_details_container(
+        frame_profile_container(
             uint64_t frame_type,
             hyquic_frame_send_mode send_mode,
             hyquic_frame_recv_mode recv_mode,
@@ -70,7 +70,7 @@ namespace si
             bool non_probing,
             buffer &&format_specification
         )
-            : frame_details{
+            : frame_profile{
                 .frame_type = frame_type,
                 .format_specification_avail = (uint16_t) format_specification.len,
                 .send_mode = send_mode,
@@ -84,38 +84,38 @@ namespace si
         {
         }
 
-        frame_details_container(const frame_details_container&) = delete;
-        frame_details_container& operator=(frame_details_container&) = delete;
+        frame_profile_container(const frame_profile_container&) = delete;
+        frame_profile_container& operator=(frame_profile_container&) = delete;
 
-        frame_details_container(frame_details_container &&other)
-            : frame_details(other.frame_details), format_specification(std::move(other.format_specification))
+        frame_profile_container(frame_profile_container &&other)
+            : frame_profile(other.frame_profile), format_specification(std::move(other.format_specification))
         {
-            other.frame_details = {0};
+            other.frame_profile = {0};
         }
 
-        frame_details_container& operator=(frame_details_container &&other)
+        frame_profile_container& operator=(frame_profile_container &&other)
         {
-            std::swap(frame_details, other.frame_details);
+            std::swap(frame_profile, other.frame_profile);
             std::swap(format_specification, other.format_specification);
             return *this;
         }
     };
 
-    int set_transport_parameter(int sockfd, buffer &&param, const std::vector<frame_details_container> &frame_details_list)
+    int set_transport_parameter(int sockfd, buffer &&param, const std::vector<frame_profile_container> &frame_profiles)
     {
-        size_t num_frame_details = frame_details_list.size();
+        size_t num_frame_profiles = frame_profiles.size();
         size_t format_specifications_length = 0;
-        for (const frame_details_container &frame_details_cont : frame_details_list)
-            format_specifications_length += frame_details_cont.format_specification.len;
-        size_t frame_details_length = num_frame_details * sizeof(hyquic_frame_details) + format_specifications_length;
+        for (const frame_profile_container &frame_profile_cont : frame_profiles)
+            format_specifications_length += frame_profile_cont.format_specification.len;
+        size_t frame_profiles_length = num_frame_profiles * sizeof(hyquic_frame_profile) + format_specifications_length;
 
-        buffer buff(sizeof(size_t) + frame_details_length + param.len);
+        buffer buff(sizeof(size_t) + frame_profiles_length + param.len);
         buffer_view cursor(buff);
 
-        cursor.push(num_frame_details);
-        for (const frame_details_container &frame_details_cont : frame_details_list) {
-            cursor.push(frame_details_cont.frame_details);
-            cursor.push_buff(frame_details_cont.format_specification);
+        cursor.push(num_frame_profiles);
+        for (const frame_profile_container &frame_profile_cont : frame_profiles) {
+            cursor.push(frame_profile_cont.frame_profile);
+            cursor.push_buff(frame_profile_cont.format_specification);
         }
         cursor.push_buff_into(std::move(param));
 

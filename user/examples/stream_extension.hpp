@@ -27,7 +27,7 @@ namespace hyquic
             stream_mng.is_server = is_server;
             stream_mng.send = {};
             stream_mng.recv = {};
-            create_stream_frame_details(frame_details, omit_ffs);
+            create_stream_frame_profiles(frame_profiles, omit_ffs);
         }
 
         inline buffer transport_parameter()
@@ -41,9 +41,9 @@ namespace hyquic
             return buff;
         }
 
-        const std::vector<si::frame_details_container>& frame_details_list()
+        const std::vector<si::frame_profile_container>& frame_profiles_list()
         {
-            return frame_details;
+            return frame_profiles;
         }
 
         handle_frame_result handle_frame(uint64_t type, buffer_view frame_content) override
@@ -279,7 +279,7 @@ namespace hyquic
     private:
         hyquic &container;
         bool is_server;
-        std::vector<si::frame_details_container> frame_details;
+        std::vector<si::frame_profile_container> frame_profiles;
         stream_frames_to_send_provider ctrl_frames_to_send;
         stream_frames_to_send_provider data_frames_to_send;
         si::default_frames_to_send_provider lost_frames_to_resend;

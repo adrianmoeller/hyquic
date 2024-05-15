@@ -115,7 +115,7 @@ enum hyquic_frame_recv_mode {
 };
 
 /**
- * Frame details communicated by user-quic. Used by kernel-quic to properly handle unknown frames.
+ * Frame profile communicated by user-quic. Used by kernel-quic to properly handle unknown frames.
  * 
  * @frame_type: frame type
  * @format_specification_avail: if 0, frame format specification is not available, otherwise, holds specification length
@@ -126,7 +126,7 @@ enum hyquic_frame_recv_mode {
  * @ack_immediate: denotes if frame should be acked immediatly
  * @non_probing: denotes if frame is non-probing
 */
-struct hyquic_frame_details {
+struct hyquic_frame_profile {
 	uint64_t frame_type;
 	uint16_t format_specification_avail;
 	enum hyquic_frame_send_mode send_mode;

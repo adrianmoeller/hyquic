@@ -9,9 +9,9 @@
 #include "hybrid.h"
 
 
-struct hyquic_frame_details_entry {
+struct hyquic_frame_profile_entry {
     struct hlist_node node;
-    struct hyquic_frame_details_cont cont;
+    struct hyquic_frame_profile_cont cont;
 };
 
 /**
@@ -29,9 +29,9 @@ inline void hyquic_enable(struct sock *sk)
 }
 
 /**
- * Initializes frame details map.
+ * Initializes frame profile map.
 */
-static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details_table)
+static int hyquic_frame_profile_table_init(struct quic_hash_table *frame_profile_table)
 {
     struct quic_hash_head *head;
     int i, size = 8;
@@ -43,8 +43,8 @@ static int hyquic_frame_details_table_init(struct quic_hash_table *frame_details
 		spin_lock_init(&head[i].lock);
 		INIT_HLIST_HEAD(&head[i].head);
 	}
-	frame_details_table->size = size;
-	frame_details_table->hash = head;
+	frame_profile_table->size = size;
+	frame_profile_table->hash = head;
 	return 0;
 }
 
@@ -67,7 +67,7 @@ int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
     skb_queue_head_init(&hyquic->unkwn_frames_fix_inqueue);
     skb_queue_head_init(&hyquic->unkwn_frames_var_deferred);
     skb_queue_head_init(&hyquic->lost_usrquic_frames_inqueue);
-    if (hyquic_frame_details_table_init(&hyquic->frame_details_table))
+    if (hyquic_frame_profile_table_init(&hyquic->frame_profile_table))
         return -ENOMEM;
 
     hyquic->last_max_payload = 0;
@@ -81,17 +81,17 @@ int hyquic_init(struct hyquic_container *hyquic, struct sock *sk)
 }
 
 /**
- * Frees frame details map and its content.
+ * Frees frame profile map and its content.
 */
-static void hyquic_frame_details_table_free(struct quic_hash_table *frame_details_table)
+static void hyquic_frame_profile_table_free(struct quic_hash_table *frame_profile_table)
 {
     struct quic_hash_head *head;
-    struct hyquic_frame_details_entry *entry;
+    struct hyquic_frame_profile_entry *entry;
     struct hlist_node *tmp;
     int i;
 
-    for (i = 0; i < frame_details_table->size; i++) {
-        head = &frame_details_table->hash[i];
+    for (i = 0; i < frame_profile_table->size; i++) {
+        head = &frame_profile_table->hash[i];
         hlist_for_each_entry_safe(entry, tmp, &head->head, node) {
             hlist_del_init(&entry->node);
             if (entry->cont.format_specification)
@@ -99,7 +99,7 @@ static void hyquic_frame_details_table_free(struct quic_hash_table *frame_detail
             kfree(entry);
         }
     }
-    kfree(frame_details_table->hash);
+    kfree(frame_profile_table->hash);
 }
 
 /**
@@ -128,7 +128,7 @@ void hyquic_free(struct hyquic_container *hyquic)
     __skb_queue_purge(&hyquic->unkwn_frames_fix_inqueue);
     __skb_queue_purge(&hyquic->unkwn_frames_var_deferred);
     __skb_queue_purge(&hyquic->lost_usrquic_frames_inqueue);
-    hyquic_frame_details_table_free(&hyquic->frame_details_table);
+    hyquic_frame_profile_table_free(&hyquic->frame_profile_table);
 
     HQ_PR_DEBUG(hyquic->sk, "done");
 }
@@ -182,49 +182,49 @@ static inline struct hyquic_transport_param* hyquic_transport_param_create(uint6
 }
 
 /**
- * Creates a frame details list entry and adds it to the frame details map in the given hyquic container.
+ * Creates a frame profile list entry and adds it to the frame profile map in the given hyquic container.
  * 
  * @param hyquic hyquic container
- * @param frame_details pointer to frame details
+ * @param frame_profile pointer to frame profile
  * @param format_specification pointer to frame format specification (may point to NULL)
  * @return negative error code if not successful, otherwise 0
 */
-static inline int hyquic_frame_details_create(struct hyquic_container *hyquic, struct hyquic_frame_details *frame_details, uint8_t *format_specification)
+static inline int hyquic_frame_profile_create(struct hyquic_container *hyquic, struct hyquic_frame_profile *frame_profile, uint8_t *format_specification)
 {
     struct quic_hash_head *head;
-    struct hyquic_frame_details_entry *entry;
+    struct hyquic_frame_profile_entry *entry;
 
     entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
     if (!entry)
         return -ENOMEM;
     
-    memcpy(&entry->cont.details, frame_details, sizeof(*frame_details));
+    memcpy(&entry->cont.profile, frame_profile, sizeof(*frame_profile));
     if (format_specification)
-        entry->cont.format_specification = kmemdup(format_specification, frame_details->format_specification_avail, GFP_KERNEL);
+        entry->cont.format_specification = kmemdup(format_specification, frame_profile->format_specification_avail, GFP_KERNEL);
     else
         entry->cont.format_specification = NULL;
 
-    head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_details->frame_type);
+    head = hyquic_raw_frame_type_head(&hyquic->frame_profile_table, frame_profile->frame_type);
     hlist_add_head(&entry->node, &head->head);
 
-    HQ_PR_DEBUG(hyquic->sk, "done, type=%llu", frame_details->frame_type);
+    HQ_PR_DEBUG(hyquic->sk, "done, type=%llu", frame_profile->frame_type);
     return 0;
 }
 
 /**
- * Gets frame details by frame type.
+ * Gets frame profile by frame type.
  * 
  * @param hyquic hyquic container
  * @param frame_type frame type
- * @return pointer to frame details container (may point to NULL if not existent)
+ * @return pointer to frame profile container (may point to NULL if not existent)
 */
-struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_container *hyquic, uint64_t frame_type)
+struct hyquic_frame_profile_cont* hyquic_frame_profile_get(struct hyquic_container *hyquic, uint64_t frame_type)
 {
-    struct quic_hash_head *head = hyquic_raw_frame_type_head(&hyquic->frame_details_table, frame_type);
-    struct hyquic_frame_details_entry *cursor;
+    struct quic_hash_head *head = hyquic_raw_frame_type_head(&hyquic->frame_profile_table, frame_type);
+    struct hyquic_frame_profile_entry *cursor;
 
     hlist_for_each_entry(cursor, &head->head, node) {
-        if (cursor->cont.details.frame_type == frame_type)
+        if (cursor->cont.profile.frame_type == frame_type)
             return &cursor->cont;
     }
 
@@ -232,7 +232,7 @@ struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_contain
 }
 
 /**
- * Checks if frame type is registered by user-quic and frame details exists.
+ * Checks if frame type is registered by user-quic and frame profile exists.
  * 
  * @param hyquic hyquic container
  * @param frame_type frame type
@@ -240,7 +240,7 @@ struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_contain
 */
 inline bool hyquic_is_usrquic_frame(struct hyquic_container *hyquic, uint64_t frame_type)
 {
-    return hyquic_frame_details_get(hyquic, frame_type);
+    return hyquic_frame_profile_get(hyquic, frame_type);
 }
 
 /**
@@ -260,7 +260,7 @@ int hyquic_set_options(struct sock *sk, struct hyquic_options *options, uint32_t
 }
 
 /**
- * Decodes and registers a local transport parameter and associated frame types with frame details communicated by user-quic via socket options.
+ * Decodes and registers a local transport parameter and associated frame types with frame profile communicated by user-quic via socket options.
  * 
  * @param sk quic socket
  * @param data encoded data
@@ -273,26 +273,26 @@ int hyquic_set_local_transport_parameter(struct sock *sk, void *data, uint32_t l
 	uint64_t param_id;
 	void *param_data;
 	uint32_t param_data_length;
-	struct hyquic_frame_details *frame_details;
+	struct hyquic_frame_profile *frame_profile;
     uint8_t *format_specification;
-	size_t num_frame_details;
+	size_t num_frame_profiles;
 	void *p = data;
 	int i, err;
 
-    num_frame_details = *((size_t*) p);
+    num_frame_profiles = *((size_t*) p);
 	p += sizeof(size_t);
-	for (i = 0; i < num_frame_details; i++) {
-		frame_details = p;
-		p += sizeof(struct hyquic_frame_details);
+	for (i = 0; i < num_frame_profiles; i++) {
+		frame_profile = p;
+		p += sizeof(struct hyquic_frame_profile);
 
-        if (frame_details->format_specification_avail) {
+        if (frame_profile->format_specification_avail) {
             format_specification = p;
-            p += frame_details->format_specification_avail;
+            p += frame_profile->format_specification_avail;
         } else {
             format_specification = NULL;
         }
 
-		err = hyquic_frame_details_create(hyquic, frame_details, format_specification);
+		err = hyquic_frame_profile_create(hyquic, frame_profile, format_specification);
 		if (err)
 			return err;
 	}
@@ -588,8 +588,8 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
     uint64_t frame_type;
     uint8_t *tmp_data_ptr, frame_type_len;
     struct sk_buff *fskb;
-    struct hyquic_frame_details_cont *frame_details_cont;
-    struct hyquic_frame_details *frame_details;
+    struct hyquic_frame_profile_cont *frame_profile_cont;
+    struct hyquic_frame_profile *frame_profile;
     struct hyquic_frame_format_spec_inout ffs_params;
     struct hyquic_ctrlrecv_raw_frames_var *ctrl_details = &HYQUIC_RCV_CB(skb)->hyquic_ctrl_details.raw_frames_var;
     bool deferred_again = false;
@@ -599,15 +599,15 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
         tmp_data_ptr = skb->data;
         frame_type_len = quic_get_var(&tmp_data_ptr, &len, &frame_type);
 
-        frame_details_cont = hyquic_frame_details_get(quic_hyquic(sk), frame_type);
-        if (frame_details_cont) {
-            frame_details = &frame_details_cont->details;
-            if (frame_details->format_specification_avail) {
+        frame_profile_cont = hyquic_frame_profile_get(quic_hyquic(sk), frame_type);
+        if (frame_profile_cont) {
+            frame_profile = &frame_profile_cont->profile;
+            if (frame_profile->format_specification_avail) {
                 ffs_params = (struct hyquic_frame_format_spec_inout) {.in = {
                     .frame_content = tmp_data_ptr,
                     .remaining_length = len,
-                    .format_specification = frame_details_cont->format_specification,
-                    .spec_length = frame_details->format_specification_avail
+                    .format_specification = frame_profile_cont->format_specification,
+                    .spec_length = frame_profile->format_specification_avail
                 }};
                 ret = hyquic_parse_frame_content(sk, &ffs_params);
                 if (ret)
@@ -638,12 +638,12 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
                 HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu", frame_type);
             }
 
-            if (frame_details->ack_eliciting) {
+            if (frame_profile->ack_eliciting) {
                 ctrl_details->ack_eliciting = 1;
-                if (frame_details->ack_immediate)
+                if (frame_profile->ack_immediate)
                     ctrl_details->ack_immediate = 1;
             }
-            if (frame_details->non_probing)
+            if (frame_profile->non_probing)
                 ctrl_details->non_probing = 1;
         } else {
             if (frame_type > QUIC_FRAME_MAX) {
@@ -847,13 +847,13 @@ out:
  * @param sk quic socket
  * @param skb socket buffer with remaining packet payload
  * @param remaining_pack_len length of remaining packed payload
- * @param frame_details_cont frame details container of upcoming frame
+ * @param frame_profile_cont frame profile container of upcoming frame
  * @return negative error code if not successful, otherwise length of parsed frame
 */
-static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont)
+static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t remaining_pack_len, struct hyquic_frame_profile_cont *frame_profile_cont)
 {
 	struct quic_packet *packet = quic_packet(sk);
-    struct hyquic_frame_details *frame_details = &frame_details_cont->details;
+    struct hyquic_frame_profile *frame_profile = &frame_profile_cont->profile;
     struct sk_buff *fskb;
     struct hyquic_rcv_cb *rcv_cb;
     struct hyquic_ctrlrecv_raw_frames_var *details;
@@ -862,13 +862,13 @@ static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint
     struct hyquic_frame_format_spec_inout ffs_params;
     int ret = 0;
 
-    if (frame_details->format_specification_avail) {
-        frame_type_len = quic_var_len(frame_details->frame_type);
+    if (frame_profile->format_specification_avail) {
+        frame_type_len = quic_var_len(frame_profile->frame_type);
         ffs_params = (struct hyquic_frame_format_spec_inout) {.in = {
             .frame_content = skb->data + frame_type_len,
             .remaining_length = remaining_pack_len - frame_type_len,
-            .format_specification = frame_details_cont->format_specification,
-            .spec_length = frame_details->format_specification_avail
+            .format_specification = frame_profile_cont->format_specification,
+            .spec_length = frame_profile->format_specification_avail
         }};
         ret = hyquic_parse_frame_content(sk, &ffs_params);
         if (ret)
@@ -876,7 +876,7 @@ static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint
 
         frame_len = frame_type_len + ffs_params.out.parsed_length;
         if (frame_len > remaining_pack_len) {
-            HQ_PR_ERR(sk, "remaining packet payload is shorter than advertised frame length, type=%llu", frame_details->frame_type);
+            HQ_PR_ERR(sk, "remaining packet payload is shorter than advertised frame length, type=%llu", frame_profile->frame_type);
             return -EINVAL;
         }
         fskb = alloc_skb(frame_len, GFP_ATOMIC);
@@ -886,7 +886,7 @@ static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint
         QUIC_SND_CB(fskb)->data_bytes = ffs_params.out.parsed_payload;
         __skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_fix_inqueue, fskb);
         ret = frame_len;
-        HQ_PR_DEBUG(sk, "forwarding frame to user-quic, type=%llu, len=%u", frame_details->frame_type, frame_len);
+        HQ_PR_DEBUG(sk, "forwarding frame to user-quic, type=%llu, len=%u", frame_profile->frame_type, frame_len);
     } else {
         fskb = alloc_skb(remaining_pack_len, GFP_ATOMIC);
         if (!fskb)
@@ -908,15 +908,15 @@ static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint
         __skb_queue_tail(&sk->sk_receive_queue, fskb);
         sk->sk_data_ready(sk);
         quic_hyquic(sk)->packet_payload_deferred = true;
-        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu, len=%u, msg_id=%u", frame_details->frame_type, remaining_pack_len, details->msg_id);
+        HQ_PR_DEBUG(sk, "forwarding remaining packet payload to user-quic, type=%llu, len=%u, msg_id=%u", frame_profile->frame_type, remaining_pack_len, details->msg_id);
     }
 
-    if (frame_details->ack_eliciting) {
+    if (frame_profile->ack_eliciting) {
         packet->ack_eliciting = 1;
-        if (frame_details->ack_immediate)
+        if (frame_profile->ack_immediate)
             packet->ack_immediate = 1;
     }
-    if (frame_details->non_probing)
+    if (frame_profile->non_probing)
         packet->non_probing = 1;
 
     return ret;
@@ -935,15 +935,15 @@ static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint
 int hyquic_process_received_frame(struct sock *sk, struct sk_buff *skb, uint32_t remaining_pack_len, uint64_t frame_type, int *frame_len)
 {
     struct hyquic_container *hyquic = quic_hyquic(sk);
-    struct hyquic_frame_details_cont *frame_details_cont = hyquic_frame_details_get(quic_hyquic(sk), frame_type);
+    struct hyquic_frame_profile_cont *frame_profile_cont = hyquic_frame_profile_get(quic_hyquic(sk), frame_type);
     int ret;
 
-    if (frame_details_cont) {
-        switch (frame_details_cont->details.recv_mode){
+    if (frame_profile_cont) {
+        switch (frame_profile_cont->profile.recv_mode){
         case HYQUIC_FRAME_RECV_MODE_KERNEL:
             return 0;
         case HYQUIC_FRAME_RECV_MODE_USER:
-            ret = hyquic_process_unkwn_frame(sk, skb, remaining_pack_len, frame_details_cont);
+            ret = hyquic_process_unkwn_frame(sk, skb, remaining_pack_len, frame_profile_cont);
             if (ret < 0) {
                 return ret;
             } else {
@@ -1120,17 +1120,17 @@ static int hyquic_process_lost_user_frame(struct sock *sk, struct sk_buff *fskb,
 int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
 {
     struct hyquic_container *hyquic = quic_hyquic(sk);
-    struct hyquic_frame_details_cont *frame_details_cont = hyquic_frame_details_get(hyquic, QUIC_SND_CB(fskb)->frame_type);
+    struct hyquic_frame_profile_cont *frame_profile_cont = hyquic_frame_profile_get(hyquic, QUIC_SND_CB(fskb)->frame_type);
 
-    if (frame_details_cont) {
-        switch (frame_details_cont->details.send_mode) {
+    if (frame_profile_cont) {
+        switch (frame_profile_cont->profile.send_mode) {
         case HYQUIC_FRAME_SEND_MODE_KERNEL:
             return 0;
         case HYQUIC_FRAME_SEND_MODE_USER:
-            return hyquic_process_lost_user_frame(sk, fskb, frame_details_cont->details.no_retransmit);
+            return hyquic_process_lost_user_frame(sk, fskb, frame_profile_cont->profile.no_retransmit);
         case HYQUIC_FRAME_SEND_MODE_BOTH:
             if (HYQUIC_SND_CB(fskb)->is_user_frame)
-                return hyquic_process_lost_user_frame(sk, fskb, frame_details_cont->details.no_retransmit);
+                return hyquic_process_lost_user_frame(sk, fskb, frame_profile_cont->profile.no_retransmit);
             return 0;
         default:
             return -EINVAL;

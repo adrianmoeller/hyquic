@@ -72,7 +72,7 @@ namespace hyquic
         buffer remote_transport_param_content;
 
         virtual inline buffer transport_parameter() = 0;
-        virtual const std::vector<si::frame_details_container>& frame_details_list() = 0;
+        virtual const std::vector<si::frame_profile_container>& frame_profiles_list() = 0;
         virtual handle_frame_result handle_frame(uint64_t type, buffer_view frame_content) = 0;
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const lost_frame_metadata &metadata) = 0;
         virtual void before_connection_initiation()
@@ -132,11 +132,11 @@ namespace hyquic
             if (running)
                 throw extension_config_error("Extensions must be registered before running HyQUIC.");
 
-            for (auto const &frame_details_cont : ext.frame_details_list()) {
-                if (extension_reg.contains(frame_details_cont.frame_details.frame_type))
+            for (auto const &frame_profile_cont : ext.frame_profiles_list()) {
+                if (extension_reg.contains(frame_profile_cont.frame_profile.frame_type))
                     throw extension_config_error("A frame type can only be managed by one extension at a time.");
-                extension_reg.insert({frame_details_cont.frame_details.frame_type, std::ref(ext)});
-                frame_details_reg.insert({frame_details_cont.frame_details.frame_type, frame_details_cont.frame_details});
+                extension_reg.insert({frame_profile_cont.frame_profile.frame_type, std::ref(ext)});
+                frame_profile_reg.insert({frame_profile_cont.frame_profile.frame_type, frame_profile_cont.frame_profile});
             }
 
             buffer transport_param = ext.transport_parameter();
@@ -148,7 +148,7 @@ namespace hyquic
                 throw extension_config_error("A transport parameter can only be managed by one extension at a time.");
             tp_id_to_extension.insert({transport_param_id, std::ref(ext)});
 
-            int err = si::set_transport_parameter(sockfd, std::move(transport_param), ext.frame_details_list());
+            int err = si::set_transport_parameter(sockfd, std::move(transport_param), ext.frame_profiles_list());
             if (err)
                 throw network_error("Setting local transport parameter failed.", err);
         }
@@ -260,7 +260,7 @@ namespace hyquic
         uint16_t sock_recv_failures_in_row;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
-        std::unordered_map<uint64_t, hyquic_frame_details> frame_details_reg;
+        std::unordered_map<uint64_t, hyquic_frame_profile> frame_profile_reg;
 
         uint32_t max_payload;
         uint32_t max_payload_dgram;
@@ -478,17 +478,17 @@ namespace hyquic
                 assert(frame_type_len);
                 while (extension_reg.contains(frame_type)) {
                     extension &ext = extension_reg.at(frame_type);
-                    const hyquic_frame_details &frame_details = frame_details_reg.at(frame_type);
+                    const hyquic_frame_profile &frame_profile = frame_profile_reg.at(frame_type);
                     handle_frame_result res = ext.handle_frame(frame_type, buff_view);
 
                     parsing_results.processed_length += frame_type_len + res.content_len;
                     parsing_results.processed_payload += res.payload_len;
-                    if (frame_details.ack_eliciting) {
+                    if (frame_profile.ack_eliciting) {
                         parsing_results.ack_eliciting = true;
-                        if (frame_details.ack_immediate)
+                        if (frame_profile.ack_immediate)
                             parsing_results.ack_immediate = true;
                     }
-                    if (frame_details.non_probing)
+                    if (frame_profile.non_probing)
                         parsing_results.non_probing = true;
 
                     buff_view.prune(res.content_len);

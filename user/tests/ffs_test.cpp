@@ -25,7 +25,7 @@ public:
         frame_format_specification_builder b0;
         b0.add_var_int_component();
 
-        frame_details.push_back(si::frame_details_container(
+        frame_profiles.push_back(si::frame_profile_container(
             0xb0,
             HYQUIC_FRAME_SEND_MODE_USER,
             HYQUIC_FRAME_RECV_MODE_USER,
@@ -39,7 +39,7 @@ public:
         frame_format_specification_builder b1;
         b1.add_fix_len_component(5);
 
-        frame_details.push_back(si::frame_details_container(
+        frame_profiles.push_back(si::frame_profile_container(
             0xb1,
             HYQUIC_FRAME_SEND_MODE_USER,
             HYQUIC_FRAME_RECV_MODE_USER,
@@ -54,7 +54,7 @@ public:
         uint8_t ref_id2 = b2.add_var_int_component(true);
         b2.add_mult_const_decl_len_component(ref_id2, 2);
 
-        frame_details.push_back(si::frame_details_container(
+        frame_profiles.push_back(si::frame_profile_container(
             0xb2,
             HYQUIC_FRAME_SEND_MODE_USER,
             HYQUIC_FRAME_RECV_MODE_USER,
@@ -72,7 +72,7 @@ public:
         uint8_t ref_id3 = b3.add_fix_len_component(1, true);
         b3.add_mult_scope_decl_len_component(ref_id3, b3_scope);
 
-        frame_details.push_back(si::frame_details_container(
+        frame_profiles.push_back(si::frame_profile_container(
             0xb3,
             HYQUIC_FRAME_SEND_MODE_USER,
             HYQUIC_FRAME_RECV_MODE_USER,
@@ -87,7 +87,7 @@ public:
         b4.add_fix_len_component(2);
         b4.add_backfill_component(true);
 
-        frame_details.push_back(si::frame_details_container(
+        frame_profiles.push_back(si::frame_profile_container(
             0xb4,
             HYQUIC_FRAME_SEND_MODE_USER,
             HYQUIC_FRAME_RECV_MODE_USER,
@@ -110,9 +110,9 @@ public:
         return buff;
     }
 
-    const std::vector<si::frame_details_container>& frame_details_list()
+    const std::vector<si::frame_profile_container>& frame_profiles_list()
     {
-        return frame_details;
+        return frame_profiles;
     }
 
     handle_frame_result handle_frame(uint64_t type, buffer_view frame_content)
@@ -179,7 +179,7 @@ public:
 
 private:
     hyquic::hyquic &container;
-    std::vector<si::frame_details_container> frame_details;
+    std::vector<si::frame_profile_container> frame_profiles;
 };
 
 void client_send_frame(hyquic_client &client, int test_case)

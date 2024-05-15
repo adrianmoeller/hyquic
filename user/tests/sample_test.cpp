@@ -22,7 +22,7 @@ public:
     sample_extension(hyquic::hyquic &container)
         : container(container), frame_received(false)
     {
-        frame_details.push_back(si::frame_details_container(
+        frame_profiles.push_back(si::frame_profile_container(
             0xb1,
             HYQUIC_FRAME_SEND_MODE_USER,
             HYQUIC_FRAME_RECV_MODE_USER,
@@ -32,7 +32,7 @@ public:
             true,
             fixed_length_frame_format_specification(1)
         ));
-        frame_details.push_back(si::frame_details_container(
+        frame_profiles.push_back(si::frame_profile_container(
             0xb2,
             HYQUIC_FRAME_SEND_MODE_USER,
             HYQUIC_FRAME_RECV_MODE_USER,
@@ -55,9 +55,9 @@ public:
         return buff;
     }
 
-    const std::vector<si::frame_details_container>& frame_details_list()
+    const std::vector<si::frame_profile_container>& frame_profiles_list()
     {
-        return frame_details;
+        return frame_profiles;
     }
 
     handle_frame_result handle_frame(uint64_t type, buffer_view frame_content)
@@ -96,7 +96,7 @@ public:
 
 private:
     hyquic::hyquic &container;
-    std::vector<si::frame_details_container> frame_details;
+    std::vector<si::frame_profile_container> frame_profiles;
 };
 
 void test_client(int argc, char *argv[])

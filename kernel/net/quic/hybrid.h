@@ -34,7 +34,7 @@ struct hyquic_transport_param {
  * @unkwn_frames_fix_inqueue: frames of known length from peer ready to be sent to user-quic
  * @unkwn_frames_var_deferred: remaining frames of a packet from peer deferred to be processed because of unknown frame length
  * @lost_usrquic_frames_inqueue: lost user-quic frames ready to be sent back to user-quic
- * @frame_details_table: mapping of frame type to frame details
+ * @frame_profile_table: mapping of frame type to frame profile
  * @last_max_payload: last value of maximum packet payload length
  * @last_max_payload_dgram: last value of maximum packet payload length for datagrams
  * @process_frame_copy: internal flag that denotes if user-quic should get a copy of the current frame
@@ -53,7 +53,7 @@ struct hyquic_container {
     struct sk_buff_head unkwn_frames_fix_inqueue;
     struct sk_buff_head unkwn_frames_var_deferred;
     struct sk_buff_head lost_usrquic_frames_inqueue;
-    struct quic_hash_table frame_details_table;
+    struct quic_hash_table frame_profile_table;
 
     uint32_t last_max_payload;
     uint32_t last_max_payload_dgram;
@@ -63,13 +63,13 @@ struct hyquic_container {
 };
 
 /**
- * Frame details container.
+ * Frame profile container.
  * 
- * @details: frame details
- * @format_specification: frame format specification (length stored in @details)
+ * @profile: frame profile
+ * @format_specification: frame format specification (length stored in @profile)
 */
-struct hyquic_frame_details_cont {
-    struct hyquic_frame_details details;
+struct hyquic_frame_profile_cont {
+    struct hyquic_frame_profile profile;
     uint8_t *format_specification;
 };
 
@@ -106,7 +106,7 @@ struct hyquic_rcv_cb {
 inline void hyquic_enable(struct sock *sk);
 int hyquic_init(struct hyquic_container *hyquic, struct sock *sk);
 void hyquic_free(struct hyquic_container *hyquic);
-struct hyquic_frame_details_cont* hyquic_frame_details_get(struct hyquic_container *hyquic, uint64_t frame_type);
+struct hyquic_frame_profile_cont* hyquic_frame_profile_get(struct hyquic_container *hyquic, uint64_t frame_type);
 inline bool hyquic_is_usrquic_frame(struct hyquic_container *hyquic, uint64_t frame_type);
 int hyquic_set_options(struct sock *sk, struct hyquic_options *options, uint32_t length);
 int hyquic_set_local_transport_parameter(struct sock *sk, void *data, uint32_t length);
