@@ -24,7 +24,8 @@ public:
     {
         frame_details.push_back(si::frame_details_container(
             0xb1,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             false,
@@ -33,7 +34,8 @@ public:
         ));
         frame_details.push_back(si::frame_details_container(
             0xb2,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,

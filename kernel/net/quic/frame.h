@@ -154,12 +154,7 @@ static inline int quic_frame_level_check(u8 level, u8 type)
 }
 
 struct sk_buff *quic_frame_create(struct sock *sk, u8 type, void *data);
-int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, bool *var_frame_encountered);
-static inline int quic_frame_process(struct sock *sk, struct sk_buff *skb)
-{
-	bool tmp;
-	return quic_frame_process_hybrid(sk, skb, &tmp);
-}
+int quic_frame_process(struct sock *sk, struct sk_buff *skb);
 inline int __quic_internal_process_frame(struct sock *sk, struct sk_buff *skb, uint64_t type);
 int quic_frame_new_connection_id_ack(struct sock *sk, struct sk_buff *skb);
 int quic_frame_set_transport_params_ext(struct sock *sk, struct quic_transport_param *params,

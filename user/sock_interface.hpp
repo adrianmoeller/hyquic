@@ -62,7 +62,8 @@ namespace si
 
         frame_details_container(
             uint64_t frame_type,
-            bool copy_incoming,
+            hyquic_frame_send_mode send_mode,
+            hyquic_frame_recv_mode recv_mode,
             bool no_retransmit,
             bool ack_eliciting,
             bool ack_immediate,
@@ -72,7 +73,8 @@ namespace si
             : frame_details{
                 .frame_type = frame_type,
                 .format_specification_avail = (uint16_t) format_specification.len,
-                .copy_incoming = copy_incoming,
+                .send_mode = send_mode,
+                .recv_mode = recv_mode,
                 .no_retransmit = no_retransmit,
                 .ack_eliciting = ack_eliciting,
                 .ack_immediate = ack_immediate,

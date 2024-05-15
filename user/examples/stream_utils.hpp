@@ -313,7 +313,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x04,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -330,7 +331,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x05,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -347,7 +349,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x08,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             false,
@@ -364,7 +367,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x09,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -382,7 +386,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x0a,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             false,
@@ -400,7 +405,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x0b,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -418,7 +424,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x0c,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             false,
@@ -436,7 +443,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x0d,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -455,7 +463,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x0e,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             false,
@@ -474,7 +483,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x0f,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -491,7 +501,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x11,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -507,7 +518,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x12,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -523,7 +535,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x13,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -540,7 +553,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x15,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -556,7 +570,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x16,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,
@@ -572,7 +587,8 @@ namespace hyquic
 
         return si::frame_details_container(
             0x17,
-            false,
+            HYQUIC_FRAME_SEND_MODE_USER,
+            HYQUIC_FRAME_RECV_MODE_USER,
             false,
             true,
             true,

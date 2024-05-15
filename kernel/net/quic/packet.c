@@ -721,7 +721,7 @@ err:
 }
 
 static int quic_packet_app_process_done(struct sock *sk, struct sk_buff *skb,
-					struct quic_crypto_info *ci, bool var_frame_encountered)
+					struct quic_crypto_info *ci)
 {
 	struct quic_crypto *crypto = quic_crypto(sk, QUIC_CRYPTO_APP);
 	struct quic_pnmap *pnmap = quic_pnmap(sk, QUIC_CRYPTO_APP);
@@ -761,7 +761,7 @@ static int quic_packet_app_process_done(struct sock *sk, struct sk_buff *skb,
 			quic_timer_reset(sk, QUIC_TIMER_SACK, quic_inq_max_ack_delay(inq));
 			quic_inq_set_need_sack(inq, 1);
 		}
-		if (var_frame_encountered)
+		if (quic_hyquic(sk)->packet_payload_deferred)
 			hyquic_frame_var_notify_sack_timer_started(sk);
 		goto out;
 	}
@@ -770,10 +770,11 @@ static int quic_packet_app_process_done(struct sock *sk, struct sk_buff *skb,
 		QUIC_SND_CB(fskb)->path_alt = rcv_cb->path_alt;
 		quic_outq_ctrl_tail(sk, fskb, true);
 	}
-	if (var_frame_encountered)
+	if (quic_hyquic(sk)->packet_payload_deferred)
 		hyquic_frame_var_notify_ack_sent(sk);
 
 out:
+	quic_hyquic(sk)->packet_payload_deferred = false;
 	consume_skb(skb);
 	if (!quic_inq_need_sack(inq)) /* delay sack timer is reused as idle timer */
 		quic_timer_reset(sk, QUIC_TIMER_SACK, quic_inq_max_idle_timeout(inq));
@@ -791,7 +792,6 @@ static int quic_packet_app_process(struct sock *sk, struct sk_buff *skb, u8 resu
 	struct quichdr *hdr = quic_hdr(skb);
 	struct quic_crypto_info ci = {};
 	int err = -EINVAL, taglen;
-	bool var_frame_encountered = false;
 
 	WARN_ON(!skb_set_owner_sk_safe(skb, sk));
 
@@ -850,14 +850,14 @@ static int quic_packet_app_process(struct sock *sk, struct sk_buff *skb, u8 resu
 	skb_pull(skb, ci.number_offset + ci.number_len);
 	packet->len = ci.length - ci.number_len - taglen;
 	rcv_cb->level = 0;
-	err = quic_frame_process_hybrid(sk, skb, &var_frame_encountered);
+	err = quic_frame_process(sk, skb);
 	if (err)
 		goto err;
 	err = quic_pnmap_mark(pnmap, ci.number);
 	if (err)
 		goto err;
 
-	return quic_packet_app_process_done(sk, skb, &ci, var_frame_encountered);
+	return quic_packet_app_process_done(sk, skb, &ci);
 
 err:
 	pr_warn("[QUIC] %s number: %llu len: %d err: %d\n", __func__, ci.number, skb->len, err);

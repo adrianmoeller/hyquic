@@ -37,6 +37,8 @@ struct hyquic_transport_param {
  * @frame_details_table: mapping of frame type to frame details
  * @last_max_payload: last value of maximum packet payload length
  * @last_max_payload_dgram: last value of maximum packet payload length for datagrams
+ * @process_frame_copy: internal flag that denotes if user-quic should get a copy of the current frame
+ * @packet_payload_deferred: internal flag that denotes if the payload processing of the current packet is deferred due to a missing FFS
 */
 struct hyquic_container {
     bool enabled;
@@ -55,6 +57,9 @@ struct hyquic_container {
 
     uint32_t last_max_payload;
     uint32_t last_max_payload_dgram;
+
+    uint8_t process_frame_copy:1;
+    uint8_t packet_payload_deferred:1;
 };
 
 /**
@@ -74,9 +79,11 @@ struct hyquic_frame_details_cont {
  * Control buffer content of to be sent frames.
  * 
  * @common: control buffer content of quic
+ * @is_user_frame: denotes if frame is sent by user-quic
 */
 struct hyquic_snd_cb {
     struct quic_snd_cb common;
+    uint8_t is_user_frame:1;
 };
 
 #define HYQUIC_SND_CB(__skb) ((struct hyquic_snd_cb *)&((__skb)->cb[0]))
@@ -110,7 +117,7 @@ int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, ui
 int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, uint8_t **pp, uint8_t *data);
 void hyquic_inq_flow_control(struct sock *sk, uint32_t freed_bytes);
 int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, struct hyquic_ctrlsend_info *info);
-int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered);
+int hyquic_process_received_frame(struct sock *sk, struct sk_buff *skb, uint32_t remaining_pack_len, uint64_t frame_type, int *frame_len);
 int hyquic_process_frame_copy(struct sock *sk, struct sk_buff *skb, uint32_t frame_content_len, uint64_t frame_type, uint8_t frame_type_len);
 inline void hyquic_frame_var_notify_sack_timer_started(struct sock *sk);
 inline void hyquic_frame_var_notify_ack_sent(struct sock *sk);

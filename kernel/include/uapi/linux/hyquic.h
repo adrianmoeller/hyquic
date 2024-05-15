@@ -97,20 +97,40 @@ struct hyquic_ctrlrecv_info {
 #define HYQUIC_SOCKOPT_INITIAL_MSS				18
 
 /**
+ * Specifies if a frame will be sent by the kernel-quic, the user-quic, or both.
+*/
+enum hyquic_frame_send_mode {
+	HYQUIC_FRAME_SEND_MODE_KERNEL,
+	HYQUIC_FRAME_SEND_MODE_USER,
+	HYQUIC_FRAME_SEND_MODE_BOTH
+};
+
+/**
+ * Specifies if a frame will be received by the kernel-quic, the user-quic, or both.
+*/
+enum hyquic_frame_recv_mode {
+	HYQUIC_FRAME_RECV_MODE_KERNEL,
+	HYQUIC_FRAME_RECV_MODE_USER,
+	HYQUIC_FRAME_RECV_MODE_BOTH
+};
+
+/**
  * Frame details communicated by user-quic. Used by kernel-quic to properly handle unknown frames.
  * 
  * @frame_type: frame type
  * @format_specification_avail: if 0, frame format specification is not available, otherwise, holds specification length
- * @copy_incoming: tells if incoming frame should still be processed in kernel-quic while user-quic receives a copy. Note: frame type must be known to kernel-quic
- * @no_retransmit: tells if frame should never be retransmitted
- * @ack_eliciting: tells if frame is ack-eliciting
- * @ack_immediate: tells if frame should be acked immediatly
- * @non_probing: tells if frame is non-probing
+ * @send_mode: specifies the send mode
+ * @recv_mode: specifies the receive mode
+ * @no_retransmit: denotes if frame should never be retransmitted. Note: only applies to frames sent by user-quic
+ * @ack_eliciting: denotes if frame is ack-eliciting
+ * @ack_immediate: denotes if frame should be acked immediatly
+ * @non_probing: denotes if frame is non-probing
 */
 struct hyquic_frame_details {
 	uint64_t frame_type;
 	uint16_t format_specification_avail;
-	uint8_t copy_incoming:1;
+	enum hyquic_frame_send_mode send_mode;
+	enum hyquic_frame_recv_mode recv_mode;
 	uint8_t no_retransmit:1;
 	uint8_t ack_eliciting:1;
 	uint8_t ack_immediate:1;

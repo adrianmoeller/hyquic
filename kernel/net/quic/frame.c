@@ -1399,7 +1399,7 @@ static struct quic_frame_ops quic_frame_ops[QUIC_FRAME_MAX + 1] = {
 	quic_frame_create_and_process(datagram),
 };
 
-int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, bool *var_frame_encountered)
+int quic_frame_process(struct sock *sk, struct sk_buff *skb)
 {
 	struct quic_rcv_cb *rcv_cb = QUIC_RCV_CB(skb);
 	struct quic_packet *packet = quic_packet(sk);
@@ -1408,7 +1408,6 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, bool *var_fr
 	uint64_t type;
 	uint8_t level = rcv_cb->level;
 	uint8_t type_len;
-	struct hyquic_frame_details_cont *frame_details_cont;
 
 	if (!len) {
 		packet->errcode = QUIC_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
@@ -1416,24 +1415,16 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, bool *var_fr
 	}
 
 	while (len > 0) {
-		bool hyquic_process_copy = false;
-
 		type_len = quic_peek_var(skb->data, &type);
 
 		if (quic_hyquic(sk)->enabled) {
-			frame_details_cont = hyquic_frame_details_get(quic_hyquic(sk), type);
-			if (frame_details_cont) {
-				if (frame_details_cont->details.copy_incoming) {
-					hyquic_process_copy = true;
-				} else {
-					ret = hyquic_process_unkwn_frame(sk, skb, len, frame_details_cont, var_frame_encountered);
-					if (ret < 0)
-						return ret;
-					if (*var_frame_encountered)
-						break;
-					goto end_while;
-				}
-			}
+			int result = hyquic_process_received_frame(sk, skb, len, type, &ret);
+			if (result < 0)
+				return result;
+			if (quic_hyquic(sk)->packet_payload_deferred)
+				break;
+			if (result)
+				goto end_while;
 		}
 
 		skb_pull(skb, type_len);
@@ -1467,7 +1458,7 @@ int quic_frame_process_hybrid(struct sock *sk, struct sk_buff *skb, bool *var_fr
 		if (quic_frame_non_probing(type))
 			packet->non_probing = 1;
 
-		if (hyquic_process_copy) {
+		if (quic_hyquic(sk)->process_frame_copy) {
 			ret = hyquic_process_frame_copy(sk, skb, ret, type, type_len);
 			if (ret < 0)
 				return ret;
