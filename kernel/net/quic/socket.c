@@ -864,11 +864,11 @@ static int quic_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int fla
 			break;
 		} else if (!stream) {
 			skb = __skb_dequeue(&sk->sk_receive_queue);
-			if (hyquic_rcv_cb->hyquic_ctrl_type == HYQUIC_CTRL_RAW_FRAMES_VAR) {
+			if (hyquic_rcv_cb->hyquic_ctrl_type == HYQUIC_CTRL_USER_PARSED_FRAMES) {
 				__skb_queue_tail(&quic_hyquic(sk)->unkwn_frames_var_deferred, skb);
 				break;
 			}
-			if (hyquic_rcv_cb->hyquic_ctrl_type == HYQUIC_CTRL_RAW_FRAMES_FIX)
+			if (hyquic_rcv_cb->hyquic_ctrl_type == HYQUIC_CTRL_FRAMES)
 				freed += hyquic_rcv_cb->hyquic_ctrl_details.raw_frames_fix.payload;
 
 			kfree_skb(skb);

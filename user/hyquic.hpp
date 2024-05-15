@@ -448,7 +448,7 @@ namespace hyquic
             assert(buff.len);
             switch (data_type)
             {
-            case HYQUIC_CTRL_RAW_FRAMES_FIX: {
+            case HYQUIC_CTRL_FRAMES: {
                 buffer_view buff_view(buff);
                 uint64_t frame_type;
 
@@ -461,7 +461,7 @@ namespace hyquic
                 }
                 break;
             }
-            case HYQUIC_CTRL_RAW_FRAMES_VAR: {
+            case HYQUIC_CTRL_USER_PARSED_FRAMES: {
                 buffer_view buff_view(buff);
                 uint64_t frame_type;
                 uint8_t frame_type_len;

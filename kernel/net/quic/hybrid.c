@@ -821,10 +821,10 @@ int hyquic_process_usrquic_data(struct sock *sk, struct iov_iter *msg_iter, stru
     }
 
     switch (info->type) {
-    case HYQUIC_CTRL_RAW_FRAMES:
+    case HYQUIC_CTRL_FRAMES:
         err = hyquic_process_usrquic_frames(sk, data, info->data_length, &info->raw_frames);
         break;
-    case HYQUIC_CTRL_RAW_FRAMES_VAR:
+    case HYQUIC_CTRL_USER_PARSED_FRAMES:
         err = hyquic_process_frames_var_reply(sk, &info->raw_frames_var);
         break;
     default:
@@ -895,7 +895,7 @@ static int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint
 
         rcv_cb = HYQUIC_RCV_CB(fskb);
         rcv_cb->common.path_alt = QUIC_RCV_CB(skb)->path_alt;
-        rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_RAW_FRAMES_VAR;
+        rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_USER_PARSED_FRAMES;
         details = &rcv_cb->hyquic_ctrl_details.raw_frames_var;
         details->msg_id = quic_hyquic(sk)->next_ic_msg_id++;
         details->ack_eliciting = packet->ack_eliciting;
@@ -1005,7 +1005,7 @@ inline void hyquic_frame_var_notify_sack_timer_started(struct sock *sk)
 
     skb_queue_reverse_walk(&sk->sk_receive_queue, skb) {
         rcv_cb = HYQUIC_RCV_CB(skb);
-        if (rcv_cb->hyquic_ctrl_type != HYQUIC_CTRL_RAW_FRAMES_VAR)
+        if (rcv_cb->hyquic_ctrl_type != HYQUIC_CTRL_USER_PARSED_FRAMES)
             continue;
 
         rcv_cb->hyquic_ctrl_details.raw_frames_var.sack_timer_started = true;
@@ -1027,7 +1027,7 @@ inline void hyquic_frame_var_notify_ack_sent(struct sock *sk)
 
     skb_queue_reverse_walk(&sk->sk_receive_queue, skb) {
         rcv_cb = HYQUIC_RCV_CB(skb);
-        if (rcv_cb->hyquic_ctrl_type != HYQUIC_CTRL_RAW_FRAMES_VAR)
+        if (rcv_cb->hyquic_ctrl_type != HYQUIC_CTRL_USER_PARSED_FRAMES)
             continue;
 
         rcv_cb->hyquic_ctrl_details.raw_frames_var.ack_sent = true;
@@ -1070,7 +1070,7 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
     }
 
     rcv_cb = HYQUIC_RCV_CB(skb);
-    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_RAW_FRAMES_FIX;
+    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_FRAMES;
     rcv_cb->hyquic_ctrl_details.raw_frames_fix.payload = payload;
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);

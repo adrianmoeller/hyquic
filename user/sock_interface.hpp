@@ -251,7 +251,7 @@ namespace si
 
         msg.msg_controllen = cmsg->cmsg_len;
         info = (hyquic_ctrlsend_info*) CMSG_DATA(cmsg);
-        info->type = HYQUIC_CTRL_RAW_FRAMES;
+        info->type = HYQUIC_CTRL_FRAMES;
         info->data_length = buff.len;
         info->raw_frames = (hyquic_ctrl_raw_frames) {
             .dont_wait = dont_wait
@@ -289,7 +289,7 @@ namespace si
 
         msg.msg_controllen = cmsg->cmsg_len;
         info = (hyquic_ctrlsend_info*) CMSG_DATA(cmsg);
-        info->type = HYQUIC_CTRL_RAW_FRAMES_VAR;
+        info->type = HYQUIC_CTRL_USER_PARSED_FRAMES;
         info->data_length = 0;
         info->raw_frames_var = content;
 

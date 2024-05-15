@@ -70,7 +70,7 @@ int hyquic_send_frames(int sockfd, const struct hyquic_frame *frames, size_t num
 
     msg.msg_controllen = cmsg->cmsg_len;
     info = (struct hyquic_ctrlsend_info*)CMSG_DATA(cmsg);
-    info->type = HYQUIC_CTRL_RAW_FRAMES;
+    info->type = HYQUIC_CTRL_FRAMES;
     info->data_length = data_length;
     info->raw_frames = (struct hyquic_ctrl_raw_frames) {};
 
