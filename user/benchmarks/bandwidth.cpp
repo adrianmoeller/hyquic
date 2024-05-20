@@ -4,6 +4,7 @@
 #include <hyquic_client.hpp>
 #include <hyquic_server.hpp>
 #include <stream_extension.hpp>
+#include <stream_injector.hpp>
 
 using namespace hyquic;
 
@@ -27,6 +28,7 @@ static struct {
 	char *cert = nullptr;
     bool server = false;
     char *mode = nullptr;
+    int ratio = 10;
     uint64_t send_msg_len = SEND_MSG_LEN;
     uint64_t total_len = TOTAL_LEN;
 } options;
@@ -59,7 +61,7 @@ static inline void pr_recv_progress(uint64_t recvd_bytes)
 static int get_options(int argc, char *argv[])
 {
     while (true) {
-        switch (getopt(argc, argv, "sa:p:k:c:m:l:t:")) {
+        switch (getopt(argc, argv, "sa:p:k:c:m:l:t:i:")) {
         case 's':
             options.server = true;
             continue;
@@ -83,6 +85,9 @@ static int get_options(int argc, char *argv[])
             continue;
         case 't':
             options.total_len = atoll(optarg);
+            continue;
+        case 'i':
+            options.ratio = atoi(optarg);
             continue;
         case '?':
             std::cout << "Error: invalid argument." << std::endl;
@@ -109,7 +114,7 @@ static int do_client_stream_ext(int64_t &elapsed_us, bool omit_ffs)
     client.connect_to_server();
 
     int err;
-    uint64_t sent_bytes;
+    uint64_t sent_bytes = 0;
     stream_data send_msg(0, 0, buffer(options.send_msg_len));
 
     auto start_time = std::chrono::steady_clock::now();
@@ -166,6 +171,71 @@ static int do_client_stream_ext_no_ffs(int64_t &elapsed_us)
 static int do_client_stream_ext(int64_t &elapsed_us)
 {
     return do_client_stream_ext(elapsed_us, false);
+}
+
+static int do_client_stream_inj(int64_t &elapsed_us)
+{
+    hyquic_client client(options.address, atoi(options.port));
+
+    stream_injector inj(client);
+    client.register_extension(inj);
+
+    client.connect_to_server();
+
+    int err;
+    uint64_t sent_bytes = 0;
+    uint32_t msg_counter = 0;
+    stream_data send_msg(0, 0, buffer(options.send_msg_len));
+
+    auto start_time = std::chrono::steady_clock::now();
+
+    send_msg.flags = QUIC_STREAM_FLAG_NEW;
+    err = client.send_msg(send_msg);
+    if (err < 0) {
+        std::cout << "Error: send msg failed (" << err << ")." << std::endl;
+        return err;
+    }
+    sent_bytes += err;
+
+    send_msg.flags = 0;
+    while (true) {
+        if ((msg_counter % 10) + 1 <= options.ratio) {
+            err = inj.inject_msg(send_msg, sent_bytes);
+        } else {
+            err = client.send_msg(send_msg);
+        }
+        if (err < 0) {
+            std::cout << "Error: send msg failed (" << err << ")." << std::endl;
+            return err;
+        }
+        sent_bytes += err;
+        msg_counter++;
+        pr_send_progress(sent_bytes);
+        
+        if (sent_bytes > options.total_len - options.send_msg_len)
+            break;
+    }
+
+    send_msg.flags = QUIC_STREAM_FLAG_FIN;
+    err = client.send_msg(send_msg);
+    if (err < 0) {
+        std::cout << "Error: send msg failed (" << err << ")." << std::endl;
+        return err;
+    }
+    sent_bytes += err;
+
+    std::optional<stream_data> recv_msg = client.receive_msg(std::chrono::seconds(20));
+    if (!recv_msg) {
+        std::cout << "Error: receive msg failed (timeout)." << std::endl;
+        return -1;
+    }
+
+    auto elapsed = std::chrono::steady_clock::now() - start_time;
+    elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+
+    client.close();
+
+    return 0;
 }
 
 static int do_client_no_ext(int64_t &elapsed_us)
@@ -304,6 +374,8 @@ static int do_client()
         ret = do_client_stream_ext_no_ffs(elapsed_us);
     else if (!strcmp(options.mode, "ext"))
         ret = do_client_stream_ext(elapsed_us);
+    else if (!strcmp(options.mode, "inj"))
+        ret = do_client_stream_inj(elapsed_us);
     else if (!strcmp(options.mode, "non"))
         ret = do_client_no_ext(elapsed_us);
     else if (!strcmp(options.mode, "kern"))

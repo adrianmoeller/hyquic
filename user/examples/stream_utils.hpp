@@ -616,6 +616,40 @@ namespace hyquic
         frame_profiles.push_back(streams_blocked_uni_frame_profile(omit_ffs));
         frame_profiles.push_back(streams_blocked_bidi_frame_profile(omit_ffs));
     }
+
+    si::frame_profile_container stream_110_injector_frame_profile()
+    {
+        return si::frame_profile_container(
+            0x0e,
+            HYQUIC_FRAME_SEND_MODE_BOTH,
+            HYQUIC_FRAME_RECV_MODE_KERNEL,
+            false,
+            true,
+            false,
+            true,
+            no_frame_format_specification()
+        );
+    }
+
+    si::frame_profile_container stream_111_injector_frame_profile()
+    {
+        return si::frame_profile_container(
+            0x0f,
+            HYQUIC_FRAME_SEND_MODE_BOTH,
+            HYQUIC_FRAME_RECV_MODE_KERNEL,
+            false,
+            true,
+            true,
+            true,
+            no_frame_format_specification()
+        );
+    }
+
+    void create_stream_injector_frame_profiles(std::vector<si::frame_profile_container> &frame_profiles)
+    {
+        frame_profiles.push_back(stream_110_injector_frame_profile());
+        frame_profiles.push_back(stream_111_injector_frame_profile());
+    }
 } // namespace hyquic
 
 #endif // __HYQUIC_STREAM_UTILS_HPP__

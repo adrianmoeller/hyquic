@@ -257,10 +257,7 @@ namespace si
             .dont_wait = dont_wait
         };
 
-        err = sendmsg(sockfd, &msg, 0);
-        if (err < 0)
-            return err;
-        return err != buff.len;
+        return sendmsg(sockfd, &msg, 0);
     }
 
     int send_notify_bytes_parsed(int sockfd, const hyquic_ctrlsend_raw_frames_var &content)

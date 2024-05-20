@@ -514,6 +514,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
         if (IS_ERR(stream))
             return (void*) stream;
         snd_cb->common.stream = stream;
+        stream->send.offset += metadata.payload_length;
     }
     snd_cb->is_user_frame = true;
 

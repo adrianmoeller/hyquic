@@ -41,7 +41,7 @@ namespace hyquic
             return buff;
         }
 
-        const std::vector<si::frame_profile_container>& frame_profiles_list()
+        const std::vector<si::frame_profile_container>& frame_profiles_list() override
         {
             return frame_profiles;
         }
@@ -164,9 +164,7 @@ namespace hyquic
                 while (!cursor.end()) {
                     data_frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), _stream);
                 }
-                send_frames();
-
-                return (int) msg.buff.len;
+                return send_frames();
             }));
 
             return fut.get();
@@ -753,7 +751,7 @@ namespace hyquic
             return false;
         }
 
-        void send_frames()
+        int send_frames()
         {
             stream_frames_to_send_provider frames_to_send;
 
@@ -766,7 +764,9 @@ namespace hyquic
             }
 
             if (!frames_to_send.empty())
-                container.send_frames(frames_to_send);
+                return container.send_frames(frames_to_send);
+
+            return 0;
         }
     };
 } // namespace hyquic
