@@ -58,14 +58,15 @@ namespace hyquic
             auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &frames_to_send]() {
                 return container.send_frames(frames_to_send);
             }));
-            return fut.get();
+            fut.get();
+            return msg.buff.len;
         }
 
     private:
         hyquic &container;
         std::vector<si::frame_profile_container> frame_profiles;
 
-        si::frame_to_send_container create_stream_frame(uint32_t max_frame_len, buffer_view &msg, uint32_t flags, uint64_t id, uint64_t offset)
+        si::frame_to_send_container create_stream_frame(uint32_t max_frame_len, buffer_view &msg, uint32_t flags, uint64_t id, uint64_t &offset)
         {
             uint64_t type = frame_type::STREAM;
             uint32_t header_len = 1;
@@ -100,6 +101,7 @@ namespace hyquic
             frame_builder.push_var(msg_len);
             frame_builder.push_pulled(msg, msg_len);
 
+            offset += msg_len;
             quic_stream_info stream_info{
                 .stream_id = id,
                 .stream_flag = flags
