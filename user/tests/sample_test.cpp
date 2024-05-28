@@ -115,7 +115,7 @@ void test_client(int argc, char *argv[])
     buffer_view cursor(frame_buff);
     cursor.push_var(0xb1);
     cursor.push_int<NETWORK>(42, 1);
-    BAZ(client.send_one_frame(si::frame_to_send_container(std::move(frame_buff))));
+    BOOST_ASSERT(client.send_one_frame(si::frame_to_send_container(std::move(frame_buff))) > 0);
 
     std::unique_lock<std::mutex> lk(ext.mut);
     ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.frame_received;});
@@ -150,7 +150,7 @@ void test_server(int argc, char *argv[])
     buffer_view cursor(frame_buff);
     cursor.push_var(0xb2);
     cursor.push_var(39485);
-    BAZ(connection.send_one_frame(si::frame_to_send_container(std::move(frame_buff))));
+    BOOST_ASSERT(connection.send_one_frame(si::frame_to_send_container(std::move(frame_buff))) > 0);
 
     std::unique_lock<std::mutex> lk(ext.mut);
     ext.frame_cond.wait_for(lk, std::chrono::seconds(3), [&ext]{return ext.frame_received;});

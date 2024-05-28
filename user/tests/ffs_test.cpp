@@ -235,7 +235,7 @@ void client_send_frame(hyquic_client &client, int test_case)
     }
     }
 
-    BAZ(client.send_frames(frames_to_send));
+    BOOST_ASSERT(client.send_frames(frames_to_send) > 0);
 }
 
 void test_client(int argc, char *argv[])

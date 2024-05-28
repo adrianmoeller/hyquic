@@ -164,7 +164,8 @@ namespace hyquic
                 while (!cursor.end()) {
                     data_frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), _stream);
                 }
-                return send_frames();
+                send_frames();
+                return (int) msg.buff.len;
             }));
 
             return fut.get();
