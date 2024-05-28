@@ -33,12 +33,12 @@ static struct {
     uint64_t total_len = TOTAL_LEN;
 } options;
 
-static inline void pr_final_bandwidth(double bandwidth)
+static inline void pr_final_bandwidth(double bandwidth, double sender_output)
 {
 #ifdef SEND_PROGRESS_INTERVAL
     std::cout << "Bandwidth: " << bandwidth << " KBytes/sec" << std::endl;
 #else
-    std::cout << bandwidth << std::endl;
+    std::cout << bandwidth << "," << sender_output << std::endl;
 #endif
 }
 
@@ -104,7 +104,7 @@ static int get_options(int argc, char *argv[])
     return 0;
 }
 
-static int do_client_stream_ext(int64_t &elapsed_us, bool omit_ffs)
+static int do_client_stream_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us, bool omit_ffs)
 {
     hyquic_client client(options.address, atoi(options.port));
 
@@ -149,6 +149,8 @@ static int do_client_stream_ext(int64_t &elapsed_us, bool omit_ffs)
     }
     sent_bytes += err;
 
+    auto elapsed_sender = std::chrono::steady_clock::now() - start_time;
+
     std::optional<stream_data> recv_msg = ext.recv_msg(RECV_MSG_LEN, std::chrono::seconds(20));
     if (!recv_msg) {
         std::cout << "Error: receive msg failed (timeout)." << std::endl;
@@ -157,23 +159,24 @@ static int do_client_stream_ext(int64_t &elapsed_us, bool omit_ffs)
 
     auto elapsed = std::chrono::steady_clock::now() - start_time;
     elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    elapsed_sender_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed_sender).count();
 
     client.close();
 
     return 0;
 }
 
-static int do_client_stream_ext_no_ffs(int64_t &elapsed_us)
+static int do_client_stream_ext_no_ffs(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
-    return do_client_stream_ext(elapsed_us, true);
+    return do_client_stream_ext(elapsed_us, elapsed_sender_us, true);
 }
 
-static int do_client_stream_ext(int64_t &elapsed_us)
+static int do_client_stream_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
-    return do_client_stream_ext(elapsed_us, false);
+    return do_client_stream_ext(elapsed_us, elapsed_sender_us, false);
 }
 
-static int do_client_stream_inj(int64_t &elapsed_us)
+static int do_client_stream_inj(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
     hyquic_client client(options.address, atoi(options.port));
 
@@ -224,6 +227,8 @@ static int do_client_stream_inj(int64_t &elapsed_us)
     }
     sent_bytes += err;
 
+    auto elapsed_sender = std::chrono::steady_clock::now() - start_time;
+
     std::optional<stream_data> recv_msg = client.receive_msg(std::chrono::seconds(20));
     if (!recv_msg) {
         std::cout << "Error: receive msg failed (timeout)." << std::endl;
@@ -232,13 +237,14 @@ static int do_client_stream_inj(int64_t &elapsed_us)
 
     auto elapsed = std::chrono::steady_clock::now() - start_time;
     elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    elapsed_sender_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed_sender).count();
 
     client.close();
 
     return 0;
 }
 
-static int do_client_no_ext(int64_t &elapsed_us)
+static int do_client_no_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
     hyquic_client client(options.address, atoi(options.port));
     client.connect_to_server();
@@ -279,6 +285,8 @@ static int do_client_no_ext(int64_t &elapsed_us)
     }
     sent_bytes += err;
 
+    auto elapsed_sender = std::chrono::steady_clock::now() - start_time;
+
     std::optional<stream_data> recv_msg = client.receive_msg(std::chrono::seconds(20));
     if (!recv_msg) {
         std::cout << "Error: receive msg failed (timeout)." << std::endl;
@@ -287,13 +295,14 @@ static int do_client_no_ext(int64_t &elapsed_us)
 
     auto elapsed = std::chrono::steady_clock::now() - start_time;
     elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    elapsed_sender_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed_sender).count();
 
     client.close();
 
     return 0;
 }
 
-static int do_client_kern(int64_t &elapsed_us)
+static int do_client_kern(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
 	struct sockaddr_in ra = {};
 	uint64_t sent_bytes = 0, sid = 0;
@@ -351,6 +360,8 @@ static int do_client_kern(int64_t &elapsed_us)
 	}
 	sent_bytes += ret;
 
+    auto elapsed_sender = std::chrono::steady_clock::now() - start_time;
+
 	memset(rcv_msg, 0, sizeof(rcv_msg));
 	ret = quic_recvmsg(sockfd, rcv_msg, options.send_msg_len * 16, &sid, &flag);
 	if (ret < 0) {
@@ -360,6 +371,7 @@ static int do_client_kern(int64_t &elapsed_us)
 	
     auto elapsed = std::chrono::steady_clock::now() - start_time;
     elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    elapsed_sender_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed_sender).count();
 
 	close(sockfd);
 	return 0;
@@ -368,25 +380,26 @@ static int do_client_kern(int64_t &elapsed_us)
 static int do_client()
 {
     int64_t elapsed_us = 0;
+    int64_t elapsed_sender_us = 0;
     int ret;
 
     if (!strcmp(options.mode, "ext_noffs"))
-        ret = do_client_stream_ext_no_ffs(elapsed_us);
+        ret = do_client_stream_ext_no_ffs(elapsed_us, elapsed_sender_us);
     else if (!strcmp(options.mode, "ext"))
-        ret = do_client_stream_ext(elapsed_us);
+        ret = do_client_stream_ext(elapsed_us, elapsed_sender_us);
     else if (!strcmp(options.mode, "inj"))
-        ret = do_client_stream_inj(elapsed_us);
+        ret = do_client_stream_inj(elapsed_us, elapsed_sender_us);
     else if (!strcmp(options.mode, "non"))
-        ret = do_client_no_ext(elapsed_us);
+        ret = do_client_no_ext(elapsed_us, elapsed_sender_us);
     else if (!strcmp(options.mode, "kern"))
-        ret = do_client_kern(elapsed_us);
+        ret = do_client_kern(elapsed_us, elapsed_sender_us);
     else {
         std::cout << "Error: unsupported client mode." << std::endl;
         return -EINVAL;
     }
 
     double total_len_kb = options.total_len / 1024;
-    pr_final_bandwidth(total_len_kb * 1000 * 1000 / elapsed_us);
+    pr_final_bandwidth(total_len_kb * 1000 * 1000 / elapsed_us, total_len_kb * 1000 * 1000 / elapsed_sender_us);
 
     return ret;
 }

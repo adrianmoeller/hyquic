@@ -39,7 +39,7 @@ if [[ -n ${LOSS} ]]; then
 fi
 
 if [[ -z ${INJ_SWEEP} ]]; then
-    echo "server_mode,client_mode,kbyte_per_sec"
+    echo "server_mode,client_mode,kbyte_per_sec,sender_kbyte_per_sec"
     for client_mode in "${CLIENT_MODES[@]}"; do
     for ((i = 0 ; i < ${REPETITIONS} ; i++)); do
         if [[ -n ${LOSS} ]]; then
