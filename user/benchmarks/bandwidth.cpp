@@ -111,7 +111,7 @@ static int do_client_stream_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us
     stream_extension ext(client, false, omit_ffs);
     client.register_extension(ext);
 
-    client.connect_to_server();
+    client.connect_to_server(options.pkey);
 
     int err;
     uint64_t sent_bytes = 0;
@@ -183,7 +183,7 @@ static int do_client_stream_inj(int64_t &elapsed_us, int64_t & elapsed_sender_us
     stream_injector inj(client);
     client.register_extension(inj);
 
-    client.connect_to_server();
+    client.connect_to_server(options.pkey);
 
     int err;
     uint64_t sent_bytes = 0;
@@ -247,7 +247,7 @@ static int do_client_stream_inj(int64_t &elapsed_us, int64_t & elapsed_sender_us
 static int do_client_no_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
     hyquic_client client(options.address, atoi(options.port));
-    client.connect_to_server();
+    client.connect_to_server(options.pkey);
 
     int err;
     uint64_t sent_bytes = 0;
@@ -325,7 +325,7 @@ static int do_client_kern(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 		return -1;
 	}
 
-	if (quic_client_handshake(sockfd, nullptr, nullptr)) {
+	if (quic_client_handshake(sockfd, options.pkey, options.cert)) {
         printf("Error: handshake failed\n");
 		return -1;
     }
