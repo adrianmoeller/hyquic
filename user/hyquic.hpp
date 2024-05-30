@@ -96,7 +96,6 @@ namespace hyquic
 
 #define SOCK_RECV_TIMEOUT 2 // sec
 #define SOCK_RECV_BUFF_INIT_SIZE 1024
-#define SOCK_RECV_BUFF_MIN_SIZE 512
 #define SOCK_RECV_FAILURE_THRESHOLD 15
 #define SOCK_RECV_FAILURE_RECOVERY_TIME 200 // ms
 
@@ -443,7 +442,6 @@ namespace hyquic
                 }
             } else {
                 sock_recv_failures_in_row = 0;
-                sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE;
 
                 boost::asio::post(recv_context, [this]() {
                     recv_loop();
