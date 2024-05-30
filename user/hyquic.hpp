@@ -95,7 +95,7 @@ namespace hyquic
     };
 
 #define SOCK_RECV_TIMEOUT 2 // sec
-#define SOCK_RECV_BUFF_INIT_SIZE 1024
+#define SOCK_RECV_BUFF_INIT_SIZE 4096 * 16
 #define SOCK_RECV_FAILURE_THRESHOLD 15
 #define SOCK_RECV_FAILURE_RECOVERY_TIME 200 // ms
 
