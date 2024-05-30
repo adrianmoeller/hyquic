@@ -103,10 +103,16 @@ namespace hyquic
     class hyquic
     {
     public:
-        hyquic(uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE)
+        hyquic(
+            uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE, 
+            time_t sock_recv_timeout = SOCK_RECV_TIMEOUT, 
+            uint32_t sock_recv_failure_recovery_time = SOCK_RECV_FAILURE_RECOVERY_TIME
+        )
             : running(false),
             ready_to_send(false),
-            sock_recv_buff_size(sock_recv_buff_size), 
+            sock_recv_buff_size(sock_recv_buff_size),
+            sock_recv_timeout(sock_recv_timeout),
+            sock_recv_failure_recovery_time(sock_recv_failure_recovery_time),
             sock_recv_failures_in_row(0),
             recv_context(1), 
             common_context(1),
@@ -257,6 +263,8 @@ namespace hyquic
         boost::asio::steady_timer recv_timer;
         wait_queue<stream_data> recv_buff;
         uint32_t sock_recv_buff_size;
+        time_t sock_recv_timeout;
+        uint32_t sock_recv_failure_recovery_time;
         uint16_t sock_recv_failures_in_row;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> extension_reg;
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
@@ -268,7 +276,7 @@ namespace hyquic
         void set_receive_timeout()
         {
             timeval tv = {
-                .tv_sec = SOCK_RECV_TIMEOUT,
+                .tv_sec = sock_recv_timeout,
                 .tv_usec = 0
             };
             int err = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const void*) &tv, sizeof(tv));
@@ -416,7 +424,7 @@ namespace hyquic
             int err = si::receive(sockfd, recv_ops, sock_recv_buff_size);
             if (err < 0) {
                 if (err == -EAGAIN || err == -EWOULDBLOCK) {
-                    recv_timer.expires_from_now(std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME));
+                    recv_timer.expires_from_now(std::chrono::milliseconds(sock_recv_failure_recovery_time));
                     recv_timer.async_wait([this](const auto& e) {
                         recv_loop();
                     });
@@ -427,7 +435,7 @@ namespace hyquic
                     if (sock_recv_failures_in_row > SOCK_RECV_FAILURE_THRESHOLD) {
                         throw network_error("Socket receive failed " + std::to_string(sock_recv_failures_in_row) + " times in a row.", err);
                     } else {
-                        recv_timer.expires_from_now(std::chrono::milliseconds(SOCK_RECV_FAILURE_RECOVERY_TIME * (long) std::pow(2, sock_recv_failures_in_row)));
+                        recv_timer.expires_from_now(std::chrono::milliseconds(sock_recv_failure_recovery_time * (long) std::pow(2, sock_recv_failures_in_row)));
                         recv_timer.async_wait([this](const auto& e) {
                             recv_loop();
                         });

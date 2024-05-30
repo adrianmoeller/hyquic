@@ -28,6 +28,8 @@ static struct {
 	char *cert = nullptr;
     bool server = false;
     char *mode = nullptr;
+    uint32_t recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE;
+    time_t recv_timeout = SOCK_RECV_TIMEOUT;
     int ratio = 10;
     uint64_t send_msg_len = SEND_MSG_LEN;
     uint64_t total_len = TOTAL_LEN;
@@ -61,7 +63,7 @@ static inline void pr_recv_progress(uint64_t recvd_bytes)
 static int get_options(int argc, char *argv[])
 {
     while (true) {
-        switch (getopt(argc, argv, "sa:p:k:c:m:l:t:i:")) {
+        switch (getopt(argc, argv, "sa:p:k:c:m:b:o:l:t:i:")) {
         case 's':
             options.server = true;
             continue;
@@ -79,6 +81,12 @@ static int get_options(int argc, char *argv[])
             continue;
         case 'm':
             options.mode = optarg;
+            continue;
+        case 'b':
+            options.recv_buff_size = atoi(optarg);
+            continue;
+        case 'o':
+            options.recv_timeout = atoi(optarg);
             continue;
         case 'l':
             options.send_msg_len = atoll(optarg);
@@ -106,7 +114,7 @@ static int get_options(int argc, char *argv[])
 
 static int do_client_stream_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us, bool omit_ffs)
 {
-    hyquic_client client(options.address, atoi(options.port));
+    hyquic_client client(options.address, atoi(options.port), options.recv_buff_size, options.recv_timeout);
 
     stream_extension ext(client, false, omit_ffs);
     client.register_extension(ext);
@@ -178,7 +186,7 @@ static int do_client_stream_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us
 
 static int do_client_stream_inj(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
-    hyquic_client client(options.address, atoi(options.port));
+    hyquic_client client(options.address, atoi(options.port), options.recv_buff_size, options.recv_timeout);
 
     stream_injector inj(client);
     client.register_extension(inj);
@@ -246,7 +254,7 @@ static int do_client_stream_inj(int64_t &elapsed_us, int64_t & elapsed_sender_us
 
 static int do_client_no_ext(int64_t &elapsed_us, int64_t & elapsed_sender_us)
 {
-    hyquic_client client(options.address, atoi(options.port));
+    hyquic_client client(options.address, atoi(options.port), options.recv_buff_size, options.recv_timeout);
     client.connect_to_server(options.pkey);
 
     int err;
@@ -409,7 +417,7 @@ static int do_server_stream_ext(bool omit_ffs)
     hyquic_server server(options.address, atoi(options.port));
 
     while (true) {
-        hyquic_server_connection connection = server.accept_connection();
+        hyquic_server_connection connection = server.accept_connection(options.recv_buff_size, options.recv_timeout);
 
         stream_extension ext(connection, true, omit_ffs);
         connection.register_extension(ext);
@@ -464,7 +472,7 @@ static int do_server_no_ext()
     hyquic_server server(options.address, atoi(options.port));
 
     while (true) {
-        hyquic_server_connection connection = server.accept_connection();
+        hyquic_server_connection connection = server.accept_connection(options.recv_buff_size, options.recv_timeout);
 
         connection.connect_to_client(options.pkey, options.cert);
 

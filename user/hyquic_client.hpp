@@ -5,8 +5,14 @@ namespace hyquic
     class hyquic_client : public hyquic
     {
     public:
-        hyquic_client(char *addr, uint16_t port, uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE)
-            : hyquic(sock_recv_buff_size)
+        hyquic_client(
+            char *addr,
+            uint16_t port,
+            uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE,
+            time_t sock_recv_timeout = SOCK_RECV_TIMEOUT,
+            uint32_t sock_recv_failure_recovery_time = SOCK_RECV_FAILURE_RECOVERY_TIME
+        )
+            : hyquic(sock_recv_buff_size, sock_recv_timeout, sock_recv_failure_recovery_time)
         {
             int err;
             sockfd = si::socket_socket(AF_INET, SOCK_DGRAM);
