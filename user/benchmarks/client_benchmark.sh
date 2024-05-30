@@ -11,8 +11,9 @@ CLIENT_MODES=('kern' 'non' 'inj' 'ext')
 SERVER_MODE=""
 LOSS=""
 INJ_SWEEP=""
+BUFF_SWEEP=""
 
-while getopts "r:m:l:i" opt; do
+while getopts "r:m:l:ib:" opt; do
     case ${opt} in
         r)
             REPETITIONS=${OPTARG}
@@ -26,6 +27,9 @@ while getopts "r:m:l:i" opt; do
         i)
             INJ_SWEEP="1"
             ;;
+        b)
+            BUFF_SWEEP=${OPTARG}
+            ;;
         ?)
             exit 1
             ;;
@@ -38,7 +42,21 @@ if [[ -n ${LOSS} ]]; then
     trap "echo '  remove loss ${LOSS}'; tc qdisc del dev lo root netem loss ${LOSS}; exit 1" SIGINT
 fi
 
-if [[ -z ${INJ_SWEEP} ]]; then
+if [[ -n ${INJ_SWEEP} ]]; then
+    echo "server_mode,inj_ratio,kbyte_per_sec,sender_kbyte_per_sec"
+    for ((i = 0 ; i <= 10 ; i++)); do
+    for ((j = 0 ; j < ${REPETITIONS} ; j++)); do
+        echo "${SERVER_MODE},${i},$(${BUILD_DIR}/bandwidth ${CLIENT_ARGS} -m inj -i ${i})"
+    done
+    done
+elif [[ -n ${BUFF_SWEEP} ]]; then
+    echo "server_mode,buff_size,kbyte_per_sec,sender_kbyte_per_sec"
+    for ((i = 256 ; i <= 16384 ; i *= 2)); do
+    for ((j = 0 ; j < ${REPETITIONS} ; j++)); do
+        echo "${SERVER_MODE},${i},$(${BUILD_DIR}/bandwidth ${CLIENT_ARGS} -m ${BUFF_SWEEP} -b ${i})"
+    done
+    done
+else
     echo "server_mode,client_mode,kbyte_per_sec,sender_kbyte_per_sec"
     for client_mode in "${CLIENT_MODES[@]}"; do
     for ((i = 0 ; i < ${REPETITIONS} ; i++)); do
@@ -54,11 +72,4 @@ if [[ -z ${INJ_SWEEP} ]]; then
         echo "  remove loss ${LOSS}"
         tc qdisc del dev lo root netem loss ${LOSS}
     fi
-else
-    echo "server_mode,inj_ratio,kbyte_per_sec"
-    for ((i = 0 ; i <= 10 ; i++)); do
-    for ((j = 0 ; j < ${REPETITIONS} ; j++)); do
-        echo "${SERVER_MODE},${i},$(${BUILD_DIR}/bandwidth ${CLIENT_ARGS} -m inj -i ${i})"
-    done
-    done
 fi
