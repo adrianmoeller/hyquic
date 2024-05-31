@@ -4,7 +4,8 @@ THIS_DIR=$(dirname "$0")
 BUILD_DIR=${THIS_DIR}/../build
 KEYS_DIR=${THIS_DIR}/../tests/keys
 SERVER_ARGS="-k ${KEYS_DIR}/server-key-u.pem -c ${KEYS_DIR}/server-cert-u.pem"
-CLIENT_ARGS="-a 127.0.0.1"
+# CLIENT_ARGS="-a 127.0.0.1"
+CLIENT_ARGS="-a 127.0.0.1 -k ${KEYS_DIR}/client-psk.txt"
 
 REPETITIONS=10
 CLIENT_MODES=('kern' 'non' 'inj' 'ext')

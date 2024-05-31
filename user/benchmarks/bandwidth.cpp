@@ -15,7 +15,7 @@ using namespace hyquic;
 // #define SEND_PROGRESS_INTERVAL 8
 // #define RECV_PROGRESS_INTERVAL 8
 
-char snd_msg[SEND_MSG_LEN];
+char snd_msg[SEND_MSG_LEN * 16];
 char rcv_msg[RECV_MSG_LEN];
 
 static char default_address[] = "0.0.0.0";
