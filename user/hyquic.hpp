@@ -102,6 +102,8 @@ namespace hyquic
     class hyquic
     {
     public:
+        std::mutex common_mutex;
+
         hyquic(
             uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE, 
             time_t sock_recv_timeout = SOCK_RECV_TIMEOUT, 
@@ -134,7 +136,7 @@ namespace hyquic
 
         void register_extension(extension &ext)
         {
-            if (running)
+            if (running.load())
                 throw extension_config_error("Extensions must be registered before running HyQUIC.");
 
             for (auto const &frame_profile_cont : ext.frame_profiles_list()) {
@@ -218,22 +220,22 @@ namespace hyquic
 
         const inline uint32_t get_max_payload() const
         {
-            return max_payload;
+            return max_payload.load();
         }
 
         const inline uint32_t get_max_payload_dgram() const
         {
-            return max_payload_dgram;
+            return max_payload_dgram.load();
         }
 
     protected:
-        bool running;
+        std::atomic_bool running;
         bool ready_to_send;
         int sockfd;
 
         void run()
         {
-            running = true;
+            running.store(true);
             set_receive_timeout();
             collect_remote_transport_parameter();
             get_inital_mss();
@@ -269,8 +271,8 @@ namespace hyquic
         std::unordered_map<uint64_t, std::reference_wrapper<extension>> tp_id_to_extension;
         std::unordered_map<uint64_t, hyquic_frame_profile> frame_profile_reg;
 
-        uint32_t max_payload;
-        uint32_t max_payload_dgram;
+        atomic_uint32_t max_payload;
+        atomic_uint32_t max_payload_dgram;
 
         void set_receive_timeout()
         {
@@ -427,7 +429,7 @@ namespace hyquic
                     recv_timer.async_wait([this](const auto& e) {
                         recv_loop();
                     });
-                } else if (!running) {
+                } else if (!running.load()) {
                     return;
                 } else {
                     sock_recv_failures_in_row++;

@@ -55,10 +55,7 @@ namespace hyquic
                 frames_to_send.push(create_stream_frame(container.get_max_payload(), cursor, msg.flags, msg.id, offset));
             }
 
-            auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &frames_to_send]() {
-                return container.send_frames(frames_to_send);
-            }));
-            fut.get();
+            container.send_frames(frames_to_send);
             return msg.buff.len;
         }
 

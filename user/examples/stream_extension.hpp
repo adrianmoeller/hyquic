@@ -48,6 +48,8 @@ namespace hyquic
 
         handle_frame_result handle_frame(uint64_t type, buffer_view frame_content) override
         {
+            std::lock_guard<std::mutex> lock(container.common_mutex);
+
             if ((type & stream_bit::MASK) == frame_type::STREAM) {
                 return process_stream_frame(type, frame_content);
             } else {
@@ -86,14 +88,18 @@ namespace hyquic
             default:
                 uint64_t stream_id;
                 frame_content.pull_var(stream_id);
-                auto stream_res = stream_mng.get_stream_send(stream_id, 0);
-                if (is_err(stream_res))
-                    throw network_error("Invalid stream id.", get_err(stream_res));
-                
-                std::shared_ptr<stream> _stream = get_val(stream_res);
-                if (_stream->send.state >= send_stream_state::RESET_SENT)
-                    return;
-                break;
+                {
+                    std::lock_guard<std::mutex> lock(container.common_mutex);
+
+                    auto stream_res = stream_mng.get_stream_send(stream_id, 0);
+                    if (is_err(stream_res))
+                        throw network_error("Invalid stream id.", get_err(stream_res));
+                    
+                    std::shared_ptr<stream> _stream = get_val(stream_res);
+                    if (_stream->send.state >= send_stream_state::RESET_SENT)
+                        return;
+                    break;
+                }
             }
 
             lost_frames_to_resend.push(si::frame_to_send_container(frame.copy_all(), metadata.payload_length, metadata.retransmit_count + 1));
@@ -103,6 +109,8 @@ namespace hyquic
 
         void handshake_done() override
         {
+            std::lock_guard<std::mutex> lock(container.common_mutex);
+
             int err;
             quic_transport_param local_tp = { .remote = false };
             socklen_t local_tp_len = sizeof(local_tp);
@@ -132,11 +140,13 @@ namespace hyquic
 
         int send_msg(stream_data &msg)
         {
-            auto stream_fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg]() {
-                return prepare_send_stream(msg);
-            }));
+            std::variant<std::shared_ptr<stream>, int> stream_res;
+            {
+                std::lock_guard<std::mutex> lock(container.common_mutex);
+                stream_res = prepare_send_stream(msg);
 
-            auto stream_res = stream_fut.get();
+            }
+
             if (is_err(stream_res)) {
                 int err = get_err(stream_res);
                 if (err != -EAGAIN)
@@ -145,30 +155,26 @@ namespace hyquic
                 std::unique_lock<std::mutex> lock(mutex);
                 // TODO add timeout
                 send_wait_cv.wait(lock, [this, &msg]() {
-                    auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg]() {
-                        return !stream_mng.stream_id_exceeds(msg.id);
-                    }));
-                    return fut.get();
+                    std::lock_guard<std::mutex> lock(container.common_mutex);
+                    return !stream_mng.stream_id_exceeds(msg.id);
                 });
             }
 
-            auto fut = boost::asio::post(container.get_context(), boost::asio::use_future([this, &msg, &stream_res]() {
-                if (is_err(stream_res))
-                    stream_res = stream_mng.get_stream_send(msg.id, msg.flags);
-                if (is_err(stream_res))
-                    return get_err(stream_res);
+            std::lock_guard<std::mutex> lock(container.common_mutex);
 
-                std::shared_ptr<stream> _stream = get_val(stream_res);
-                buffer_view cursor(msg.buff);
+            if (is_err(stream_res))
+                stream_res = stream_mng.get_stream_send(msg.id, msg.flags);
+            if (is_err(stream_res))
+                return get_err(stream_res);
 
-                while (!cursor.end()) {
-                    data_frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), _stream);
-                }
-                send_frames();
-                return (int) msg.buff.len;
-            }));
+            std::shared_ptr<stream> _stream = get_val(stream_res);
+            buffer_view cursor(msg.buff);
 
-            return fut.get();
+            while (!cursor.end()) {
+                data_frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), _stream);
+            }
+            send_frames();
+            return msg.buff.len;
         }
 
         stream_data recv_msg(uint32_t max_length)
@@ -196,9 +202,9 @@ namespace hyquic
                 started_stream_data_offset = 0;
 
                 if (started_stream_data->fin) {
-                    boost::asio::post(container.get_context(), [_stream = started_stream_data->_stream]() {
-                        _stream->recv.state = recv_stream_state::READ;
-                    });
+                    std::lock_guard<std::mutex> lock(container.common_mutex);
+
+                    started_stream_data->_stream->recv.state = recv_stream_state::READ;
                     started_stream_data = std::optional<stream_frame>();
                     flags |= QUIC_STREAM_FLAG_FIN;
                     break;
@@ -214,10 +220,9 @@ namespace hyquic
 
             buffer recv_data = data_builder.trim();
 
-            boost::asio::post(container.get_context(), [this, current_stream, recv_len = recv_data.len]() {
-                handle_recv_flow_control(current_stream, recv_len);
-            });
+            std::lock_guard<std::mutex> lock(container.common_mutex);
 
+            handle_recv_flow_control(current_stream, recv_data.len);
             return stream_data(current_stream->id, flags, std::move(recv_data));
         }
 
@@ -250,9 +255,9 @@ namespace hyquic
                 started_stream_data_offset = 0;
 
                 if (started_stream_data->fin) {
-                    boost::asio::post(container.get_context(), [_stream = started_stream_data->_stream]() {
-                        _stream->recv.state = recv_stream_state::READ;
-                    });
+                    std::lock_guard<std::mutex> lock(container.common_mutex);
+
+                    started_stream_data->_stream->recv.state = recv_stream_state::READ;
                     started_stream_data = std::optional<stream_frame>();
                     flags |= QUIC_STREAM_FLAG_FIN;
                     break;
@@ -268,10 +273,9 @@ namespace hyquic
 
             buffer recv_data = data_builder.trim();
 
-            boost::asio::post(container.get_context(), [this, current_stream, recv_len = recv_data.len]() {
-                handle_recv_flow_control(current_stream, recv_len);
-            });
+            std::lock_guard<std::mutex> lock(container.common_mutex);
 
+            handle_recv_flow_control(current_stream, recv_data.len);
             return stream_data(current_stream->id, flags, std::move(recv_data));
         }
 
