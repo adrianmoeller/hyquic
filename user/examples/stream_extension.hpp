@@ -50,32 +50,44 @@ namespace hyquic
         {
             std::lock_guard<std::mutex> lock(container.common_mutex);
 
+            handle_frame_result res = {0, 0};
             if ((type & stream_bit::MASK) == frame_type::STREAM) {
-                return process_stream_frame(type, frame_content);
+                res = process_stream_frame(type, frame_content);
             } else {
                 switch (type) {
                 case frame_type::RESET_STREAM:
-                    return process_reset_stream_frame(type, frame_content);
+                    res = process_reset_stream_frame(type, frame_content);
+                    break;
                 case frame_type::STOP_SENDING:
-                    return process_stop_sending_frame(type, frame_content);
+                    res = process_stop_sending_frame(type, frame_content);
+                    break;
                 case frame_type::MAX_STREAM_DATA:
-                    return process_max_stream_data_frame(type, frame_content);
+                    res = process_max_stream_data_frame(type, frame_content);
+                    break;
                 case frame_type::MAX_STREAMS_UNI:
-                    return process_max_streams_uni_frame(type, frame_content);
+                    res = process_max_streams_uni_frame(type, frame_content);
+                    break;
                 case frame_type::MAX_STREAMS_BIDI:
-                    return process_max_streams_bidi_frame(type, frame_content);
+                    res = process_max_streams_bidi_frame(type, frame_content);
+                    break;
                 case frame_type::STREAM_DATA_BLOCKED:
-                    return process_stream_data_blocked_frame(type, frame_content);
+                    res = process_stream_data_blocked_frame(type, frame_content);
+                    break;
                 case frame_type::STREAMS_BLOCKED_UNI:
-                    return process_streams_blocked_uni_frame(type, frame_content);
+                    res = process_streams_blocked_uni_frame(type, frame_content);
+                    break;
                 case frame_type::STREAMS_BLOCKED_BIDI:
-                    return process_streams_blocked_bidi_frame(type, frame_content);
+                    res = process_streams_blocked_bidi_frame(type, frame_content);
+                    break;
                 default:
                     assert(false);
                     break;
                 }
             }
-            return {0, 0};
+
+            send_frames();
+
+            return res;
         }
 
         void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const lost_frame_metadata &metadata) override
@@ -173,7 +185,9 @@ namespace hyquic
             while (!cursor.end()) {
                 data_frames_to_send.push(create_stream_frame(container.get_max_payload(), _stream, cursor, msg.flags), _stream);
             }
-            send_frames();
+            int err = send_frames();
+            if (err < 0)
+                return err;
             return msg.buff.len;
         }
 

@@ -55,7 +55,9 @@ namespace hyquic
                 frames_to_send.push(create_stream_frame(container.get_max_payload(), cursor, msg.flags, msg.id, offset));
             }
 
-            container.send_frames(frames_to_send);
+            int err = container.send_frames(frames_to_send);
+            if (err <= 0)
+                return err;
             return msg.buff.len;
         }
 
