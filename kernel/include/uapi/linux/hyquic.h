@@ -20,7 +20,7 @@ enum hyquic_ctrl_type {
 	HYQUIC_CTRL_FRAMES,
 	HYQUIC_CTRL_USER_PARSED_FRAMES,
 	HYQUIC_CTRL_LOST_FRAMES,
-	HYQUIC_CTRL_MSS_UPDATE
+	HYQUIC_CTRL_MPS_UPDATE
 };
 
 struct hyquic_ctrl_raw_frames {
@@ -67,7 +67,7 @@ struct hyquic_ctrlrecv_lost_frames {
 	uint8_t retransmit_count;
 };
 
-struct hyquic_ctrlrecv_mss_update {
+struct hyquic_ctrlrecv_mps_update {
 	uint32_t max_payload;
 	uint32_t max_payload_dgram;
 };
@@ -76,7 +76,7 @@ union hyquic_ctrlrecv_info_details {
 	struct hyquic_ctrlrecv_raw_frames_fix raw_frames_fix;
 	struct hyquic_ctrlrecv_raw_frames_var raw_frames_var;
 	struct hyquic_ctrlrecv_lost_frames lost_frames;
-	struct hyquic_ctrlrecv_mss_update mss_update;
+	struct hyquic_ctrlrecv_mps_update mps_update;
 };
 
 /**
@@ -93,7 +93,7 @@ struct hyquic_ctrlrecv_info {
 #define HYQUIC_SOCKOPT_OPTIONS					15
 #define HYQUIC_SOCKOPT_TRANSPORT_PARAM			16
 #define HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN		17
-#define HYQUIC_SOCKOPT_INITIAL_MSS				18
+#define HYQUIC_SOCKOPT_INITIAL_MPS				18
 
 /**
  * Specifies if a frame will be sent by the kernel-quic, the user-quic, or both.

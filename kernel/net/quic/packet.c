@@ -1294,7 +1294,7 @@ void quic_packet_mss_update(struct sock *sk, int mss)
 
 out:
 	if (quic_hyquic(sk)->enabled)
-		hyquic_handle_mss_update(sk, packet);
+		hyquic_handle_mps_update(sk, packet);
 }
 
 int quic_packet_route(struct sock *sk)

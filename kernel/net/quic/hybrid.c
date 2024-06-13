@@ -379,7 +379,7 @@ int hyquic_get_remote_transport_parameters_length(struct sock *sk, int len, char
 }
 
 /**
- * Gets the MSS value to be transferred to user-quic via socket options.
+ * Gets the MPS value to be transferred to user-quic via socket options.
  * 
  * @param sk quic socket
  * @param len provided buffer length for option value
@@ -387,27 +387,27 @@ int hyquic_get_remote_transport_parameters_length(struct sock *sk, int len, char
  * @param optlen pointer to actual length of option value
  * @return negative error code if not successful, otherwise 0
 */
-int hyquic_get_initial_mss(struct sock *sk, int len, char __user *optval, int __user *optlen)
+int hyquic_get_initial_mps(struct sock *sk, int len, char __user *optval, int __user *optlen)
 {
 	struct quic_packet *packet = quic_packet(sk);
-	struct hyquic_ctrlrecv_mss_update initial_mss = {
+	struct hyquic_ctrlrecv_mps_update initial_mps = {
 		.max_payload = quic_packet_max_payload(packet),
 		.max_payload_dgram = quic_packet_max_payload_dgram(packet)
 	};
 
-	if (len < sizeof(initial_mss)) {
-		HQ_PR_ERR(sk, "provided buffer too small, %lu bytes needed", sizeof(initial_mss));
+	if (len < sizeof(initial_mps)) {
+		HQ_PR_ERR(sk, "provided buffer too small, %lu bytes needed", sizeof(initial_mps));
 		return -EINVAL;
 	}
 
-	len = sizeof(initial_mss);
+	len = sizeof(initial_mps);
 
-	if (put_user(len, optlen) || copy_to_user(optval, &initial_mss, len))
+	if (put_user(len, optlen) || copy_to_user(optval, &initial_mps, len))
 		return -EFAULT;
 
 	hyquic_enable(sk);
 
-	HQ_PR_DEBUG(sk, "done, max_payload=%u, max_payload_dgram=%u", initial_mss.max_payload, initial_mss.max_payload_dgram);
+	HQ_PR_DEBUG(sk, "done, max_payload=%u, max_payload_dgram=%u", initial_mps.max_payload, initial_mps.max_payload_dgram);
 	return 0;
 }
 
@@ -1190,7 +1190,7 @@ int hyquic_flush_lost_frames_inqueue(struct sock *sk)
 }
 
 /**
- * Notifies the user-quic about changed MSS values:
+ * Notifies the user-quic about changed MPS values:
  * - Maximum payload of a packet
  * - Maximum payload of a packet for datagrams
  * 
@@ -1198,7 +1198,7 @@ int hyquic_flush_lost_frames_inqueue(struct sock *sk)
  * @param packet packet information
  * @return negative error code if not successful, otherwise 0
 */
-int hyquic_handle_mss_update(struct sock *sk, struct quic_packet *packet)
+int hyquic_handle_mps_update(struct sock *sk, struct quic_packet *packet)
 {
     uint32_t max_payload = quic_packet_max_payload(packet);
     uint32_t max_payload_dgram = quic_packet_max_payload_dgram(packet);
@@ -1219,9 +1219,9 @@ int hyquic_handle_mss_update(struct sock *sk, struct quic_packet *packet)
         return -ENOMEM;
     
     rcv_cb = HYQUIC_RCV_CB(skb);
-    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_MSS_UPDATE;
-    rcv_cb->hyquic_ctrl_details.mss_update.max_payload = max_payload;
-    rcv_cb->hyquic_ctrl_details.mss_update.max_payload_dgram = max_payload_dgram;
+    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_MPS_UPDATE;
+    rcv_cb->hyquic_ctrl_details.mps_update.max_payload = max_payload;
+    rcv_cb->hyquic_ctrl_details.mps_update.max_payload_dgram = max_payload_dgram;
 
     __skb_queue_tail(&sk->sk_receive_queue, skb);
     sk->sk_data_ready(sk);

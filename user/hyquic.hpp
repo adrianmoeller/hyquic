@@ -238,7 +238,7 @@ namespace hyquic
             running.store(true);
             set_receive_timeout();
             collect_remote_transport_parameter();
-            get_inital_mss();
+            get_inital_mps();
             notify_extensions_handshake_done();
             ready_to_send = true;
             boost::asio::post(recv_context, [this]() {
@@ -329,16 +329,16 @@ namespace hyquic
             }
         }
 
-        void get_inital_mss()
+        void get_inital_mps()
         {
-            hyquic_ctrlrecv_mss_update initial_mss;
-            socklen_t len = sizeof(initial_mss);
-            int err = si::socket_getsockopt(sockfd, HYQUIC_SOCKOPT_INITIAL_MSS, &initial_mss, &len);
+            hyquic_ctrlrecv_mps_update initial_mps;
+            socklen_t len = sizeof(initial_mps);
+            int err = si::socket_getsockopt(sockfd, HYQUIC_SOCKOPT_INITIAL_MPS, &initial_mps, &len);
             if (err)
-                throw network_error("Getting initial MSS values failed.", err);
+                throw network_error("Getting initial MPS values failed.", err);
 
-            max_payload = initial_mss.max_payload;
-            max_payload_dgram = initial_mss.max_payload_dgram;
+            max_payload = initial_mps.max_payload;
+            max_payload_dgram = initial_mps.max_payload_dgram;
         }
 
         void notify_extensions_handshake_done()
@@ -536,9 +536,9 @@ namespace hyquic
                 }
                 break;
             }
-            case HYQUIC_CTRL_MSS_UPDATE: {
-                max_payload = details.mss_update.max_payload;
-                max_payload_dgram = details.mss_update.max_payload_dgram;
+            case HYQUIC_CTRL_MPS_UPDATE: {
+                max_payload = details.mps_update.max_payload;
+                max_payload_dgram = details.mps_update.max_payload_dgram;
                 break;
             }
             default:

@@ -2006,8 +2006,8 @@ static int quic_getsockopt(struct sock *sk, int level, int optname,
 	case HYQUIC_SOCKOPT_TRANSPORT_PARAM_LEN:
 		retval = hyquic_get_remote_transport_parameters_length(sk, len, optval, optlen);
 		break;
-	case HYQUIC_SOCKOPT_INITIAL_MSS:
-		retval = hyquic_get_initial_mss(sk, len, optval, optlen);
+	case HYQUIC_SOCKOPT_INITIAL_MPS:
+		retval = hyquic_get_initial_mps(sk, len, optval, optlen);
 		break;
 	default:
 		retval = -ENOPROTOOPT;

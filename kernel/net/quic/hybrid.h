@@ -112,7 +112,7 @@ int hyquic_set_options(struct sock *sk, struct hyquic_options *options, uint32_t
 int hyquic_set_local_transport_parameter(struct sock *sk, void *data, uint32_t length);
 int hyquic_get_remote_transport_parameters(struct sock *sk, int len, char __user *optval, int __user *optlen);
 int hyquic_get_remote_transport_parameters_length(struct sock *sk, int len, char __user *optval, int __user *optlen);
-int hyquic_get_initial_mss(struct sock *sk, int len, char __user *optval, int __user *optlen);
+int hyquic_get_initial_mps(struct sock *sk, int len, char __user *optval, int __user *optlen);
 int hyquic_handle_remote_transport_parameter(struct hyquic_container *hyquic, uint64_t type, uint8_t **pp, uint32_t *plen);
 int hyquic_transfer_local_transport_parameters(struct hyquic_container *hyquic, uint8_t **pp, uint8_t *data);
 void hyquic_inq_flow_control(struct sock *sk, uint32_t freed_bytes);
@@ -124,6 +124,6 @@ inline void hyquic_frame_var_notify_ack_sent(struct sock *sk);
 int hyquic_flush_unkwn_frames_inqueue(struct sock *sk);
 int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb);
 int hyquic_flush_lost_frames_inqueue(struct sock *sk);
-int hyquic_handle_mss_update(struct sock *sk, struct quic_packet *packet);
+int hyquic_handle_mps_update(struct sock *sk, struct quic_packet *packet);
 
 #endif /* __QUIC_HYBRID_H__ */
