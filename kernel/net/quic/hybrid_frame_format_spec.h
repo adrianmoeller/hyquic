@@ -3,6 +3,16 @@
 
 #define HYQUIC_REF_ID_MAX 15
 
+/**
+ * Input/output parameters for hyquic_parse_frame_content function.
+ * 
+ * @frame_content: frame content that will be parsed
+ * @remaining_length: remaining length of the packet (starting from the beginning of the frame content)
+ * @format_specification: encoded FFS to use
+ * @spec_length: length of the encoded FFS
+ * @parsed_length: resulting length of the frame content
+ * @parsed_payload: resulting length of the payload contained in the frame content
+ */
 struct hyquic_frame_format_spec_inout {
     struct {
         uint8_t *frame_content;
@@ -16,6 +26,16 @@ struct hyquic_frame_format_spec_inout {
     } out;
 };
 
+/**
+ * Container to store temporary working data while parsing the frame content.
+ * 
+ * @spec_length: current remaining length of the unprocessed FFS
+ * @spec_cursor: current position at the FFS
+ * @content_length: current remaining length of the packet
+ * @content_cursor: current position in the frame content
+ * @parsed_payload: payload that has been parsed so far
+ * @ref_id_index: reference id index
+ */
 struct hyquic_frame_format_spec_cont {
     uint32_t spec_length;
     uint8_t *spec_cursor;
@@ -25,6 +45,15 @@ struct hyquic_frame_format_spec_cont {
     uint64_t ref_id_index[HYQUIC_REF_ID_MAX];
 };
 
+/**
+ * Stores a declared length into the index.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @param ref_id reference ID at which to store the length
+ * @param length_value the declared length to store
+ * @return negative error code if not successful, otherwise 0
+ */
 static inline int hyquic_ref_id_to_index(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, uint64_t length_value)
 {
     if (ref_id > HYQUIC_REF_ID_MAX) {
@@ -40,11 +69,28 @@ static inline int hyquic_ref_id_to_index(struct sock *sk, struct hyquic_frame_fo
     return 0;
 }
 
+/**
+ * Retrieves a declared length from the index.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @param ref_id the reference ID at which the declared length was stored
+ * @return the declared length
+ */
 static inline uint64_t hyquic_declared_length_from_index(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
 {
     return cont->ref_id_index[ref_id - 1];
 }
 
+/**
+ * Parses the frame content according to the given variable-length integer component.
+ * If the component represents a length, it stores the declared length in the index.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @param is_payload indicates if the parsed frame content is part of the payload
+ * @return negative error code if not successful, otherwise 0
+ */
 static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     uint64_t value;
@@ -69,6 +115,15 @@ static inline int hyquic_parse_var_int_component(struct sock *sk, struct hyquic_
     return 0;
 }
 
+/**
+ * Parses the frame content according to the given fixed length component.
+ * If the component represents a length, it stores the declared length in the index.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @param is_payload indicates if the parsed frame content is part of the payload
+ * @return negative error code if not successful, otherwise 0
+ */
 static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     uint64_t length_value, declared_length;
@@ -108,6 +163,15 @@ static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_
     return 0;
 }
 
+/**
+ * Parses the frame content according to the given multiply constant by declared length component.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @param ref_id reference ID at which the declared length is stored
+ * @param is_payload indicates if the parsed frame content is part of the payload
+ * @return negative error code if not successful, otherwise 0
+ */
 static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     uint64_t declared_length;
@@ -152,6 +216,15 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
 
 static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont);
 
+/**
+ * Parses the frame content according to the given multiply scope by declared length component.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @param ref_id reference ID at which the declared length is stored
+ * @param is_payload indicates if the parsed frame content is part of the payload
+ * @return negative error code if not successful, otherwise 0
+ */
 static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id, bool is_payload)
 {
     int err, i;
@@ -218,6 +291,14 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
     return 0;
 }
 
+/**
+ * Parses the frame content according to the given backfill component.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @param is_payload indicates if the parsed frame content is part of the payload
+ * @return negative error code if not successful, otherwise 0
+ */
 static inline int hyquic_parse_backfill_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, bool is_payload)
 {
     uint32_t length;
@@ -241,6 +322,13 @@ static inline int hyquic_parse_backfill_component(struct sock *sk, struct hyquic
     return 0;
 }
 
+/**
+ * Parses the header of the next FFS component and executes the corresponding component handler.
+ * 
+ * @param sk quic socket
+ * @param cont FFS container
+ * @return negative error code if not successful, otherwise 0
+ */
 static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont)
 {
     uint8_t comp_header = *cont->spec_cursor;
@@ -264,6 +352,14 @@ static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame
     }
 }
 
+/**
+ * Parses the content of a frame with a frame format specification (FFS) to determine its length and containing payload.
+ * Since the FFS is present only in encoded form, it is interpreted at runtime while parsing the frame content.
+ * 
+ * @param sk quic socket
+ * @param params input/output parameters
+ * @return negative error code if not successful, otherwise 0
+ */
 static inline int hyquic_parse_frame_content(struct sock *sk, struct hyquic_frame_format_spec_inout *params)
 {
     int err;
