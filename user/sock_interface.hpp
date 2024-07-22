@@ -100,7 +100,15 @@ namespace si
             return *this;
         }
     };
-
+    
+    /**
+     * Convenience wrapper to communicate an additional transport parameter including frame profiles to the kernel-quic.
+     * 
+     * @param sockfd socket file descriptor
+     * @param param encoded transport parameter
+     * @param frame_profiles a list of frame profile containers
+     * @return negative error code if not successful, otherwise 0
+     */
     int set_transport_parameter(int sockfd, buffer &&param, const std::vector<frame_profile_container> &frame_profiles)
     {
         size_t num_frame_profiles = frame_profiles.size();
@@ -162,15 +170,36 @@ namespace si
         }
     };
 
+    /**
+     * Abstract class that holds frames to be sent to the kernel-quic.
+     * It provides an interface to simplify the encoding process of the message holding all the frames.
+     */
     class frames_to_send_provider
     {
     public:
+        /**
+         * @return the total length of all currently contained frames
+         */
         virtual size_t total_frames_data_length() const = 0;
+        /**
+         * @return the number of contained frames
+         */
         virtual size_t size() const = 0;
+        /**
+         * @return if there are no contained frames
+         */
         virtual bool empty() const = 0;
+        /**
+         * Removes the next frame to be sent and returns it.
+         * 
+         * @return the next frame to be sent
+         */
         virtual frame_to_send_container pop() = 0;
     };
 
+    /**
+     * The default provider for frames to be sent maintaining a single FIFO queue of frames.
+     */
     class default_frames_to_send_provider : public frames_to_send_provider
     {
     public:
@@ -223,6 +252,13 @@ namespace si
         return buff;
     }
 
+    /**
+     * Convenience wrapper for sending encoded frames to the kernel-quic.
+     * 
+     * @param sockfd socket file descriptor
+     * @param frames provider of to be sent frames
+     * @return negative error code if not successful, otherwise the number of bytes sent (of all sent data, not only the frames)
+     */
     int send_frames(int sockfd, frames_to_send_provider &frames, bool dont_wait = false)
     {
         buffer buff = assemble_frame_data(frames);
@@ -260,6 +296,13 @@ namespace si
         return sendmsg(sockfd, &msg, 0);
     }
 
+    /**
+     * Convenience wrapper for sending a reply with the parsed bytes of a remaining packet content back to the kernel-quic.
+     * 
+     * @param sockfd socket file descriptor
+     * @param content hyquic control data message
+     * @return negative error code if not successful, otherwise the number of bytes sent
+     */
     int send_notify_bytes_parsed(int sockfd, const hyquic_ctrlsend_raw_frames_var &content)
     {
         char outcmsg[CMSG_SPACE(sizeof(hyquic_ctrlsend_info))];
@@ -293,6 +336,9 @@ namespace si
         return sendmsg(sockfd, &msg, 0);
     }
 
+    /**
+     * Both functions should return a negative error code if not successful, otherwise the number of bytes received.
+     */
     struct receive_ops {
         std::function<int(buffer&&, const quic_stream_info&)> recv_stream_data;
         std::function<int(buffer&&, const hyquic_ctrlrecv_info&)> recv_hyquic_ctrl_data;
@@ -303,6 +349,14 @@ namespace si
         hyquic_ctrlrecv_info hyquic;
     };
 
+    /**
+     * Convenience wrapper for receiving data from the kernel-quic providing demultiplexing of stream data and hyquic control data.
+     * 
+     * @param sockfd socket file descriptor
+     * @param recv_ops handlers for received stream data and hyquic control data
+     * @param len length of the socket receive buffer
+     * @return negative error code if not successful, otherwise the number of bytes received 
+     */
     int receive(int sockfd, const receive_ops &recv_ops, size_t len)
     {
         hyquic_cmsg_content info;
