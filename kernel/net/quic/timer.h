@@ -11,24 +11,25 @@
 #ifndef __QUIC_TIMER_H__
 #define __QUIC_TIMER_H__
 
-#define QUIC_TIMER_RTX		0
-#define QUIC_TIMER_ACK		1
-#define QUIC_TIMER_IDLE		2
-#define QUIC_TIMER_PROBE	3
-#define QUIC_TIMER_PATH		4
-
-#define QUIC_TIMER_MAX		5
-
-struct quic_timer {
-	struct timer_list timer;
-	unsigned long timeout;
+enum {
+	QUIC_TIMER_AP_LOSS = QUIC_CRYPTO_APP,
+	QUIC_TIMER_IN_LOSS = QUIC_CRYPTO_INITIAL,
+	QUIC_TIMER_HS_LOSS = QUIC_CRYPTO_HANDSHAKE,
+	QUIC_TIMER_SACK,
+	QUIC_TIMER_PATH,
+	QUIC_TIMER_MAX,
 };
 
-void quic_timer_setup(struct sock *sk, u8 type, u32 timeout);
-void quic_timer_reset(struct sock *sk, u8 type);
-void quic_timer_start(struct sock *sk, u8 type);
+#define QUIC_MIN_PROBE_TIMEOUT	5000000
+
+#define QUIC_MIN_IDLE_TIMEOUT	1000000
+#define QUIC_DEF_IDLE_TIMEOUT	30000000
+
+void quic_timer_reduce(struct sock *sk, u8 type, u32 timeout);
+void quic_timer_reset(struct sock *sk, u8 type, u32 timeout);
+void quic_timer_start(struct sock *sk, u8 type, u32 timeout);
 void quic_timer_stop(struct sock *sk, u8 type);
-void quic_timers_init(struct sock *sk);
-void quic_timers_free(struct sock *sk);
+void quic_timer_init(struct sock *sk);
+void quic_timer_free(struct sock *sk);
 
 #endif /* __QUIC_TIMER_H__ */

@@ -14,6 +14,11 @@
 #define QUIC_PATH_ALT_SRC	0x1
 #define QUIC_PATH_ALT_DST	0x2
 
+#define QUIC_PATH_MAX_PMTU	65536
+
+#define QUIC_MIN_UDP_PAYLOAD	1200
+#define QUIC_MAX_UDP_PAYLOAD	65527
+
 struct quic_bind_port {
 	unsigned short		port;
 	struct hlist_node	node;
@@ -69,6 +74,11 @@ static inline union quic_addr *quic_path_addr(struct quic_path_addr *a, bool alt
 	return &a->addr[a->active ^ alt];
 }
 
+static inline union quic_addr *quic_path_udp(struct quic_path_addr *a, bool alt)
+{
+	return &((struct quic_path_src *)a)->udp_sk[a->active ^ alt]->addr;
+}
+
 static inline struct quic_bind_port *quic_path_port(struct quic_path_addr *a, bool alt)
 {
 	return &((struct quic_path_src *)a)->port[a->active ^ alt];
@@ -85,14 +95,46 @@ static inline int quic_path_cmp(struct quic_path_addr *a, bool alt, union quic_a
 	return memcmp(addr, quic_path_addr(a, alt), a->addr_len);
 }
 
-void quic_udp_sock_put(struct quic_udp_sock *us);
-struct quic_udp_sock *quic_udp_sock_get(struct quic_udp_sock *us);
+static inline u32 quic_path_mtu_info(struct quic_path_addr *a)
+{
+	return ((struct quic_path_dst *)a)->mtu_info;
+}
+
+static inline void quic_path_set_mtu_info(struct quic_path_addr *a, u32 mtu_info)
+{
+	((struct quic_path_dst *)a)->mtu_info = mtu_info;
+}
+
+static inline u8 quic_path_sent_cnt(struct quic_path_addr *a)
+{
+	return a->sent_cnt;
+}
+
+static inline void quic_path_set_sent_cnt(struct quic_path_addr *a, u8 cnt)
+{
+	a->sent_cnt = cnt;
+}
+
+static inline void quic_path_swap_active(struct quic_path_addr *a)
+{
+	a->active = !a->active;
+}
+
+static inline u8 *quic_path_entropy(struct quic_path_addr *a)
+{
+	return a->entropy;
+}
+
+static inline u8 quic_path_udp_bind(struct quic_path_addr *a)
+{
+	return a->udp_bind;
+}
+
 int quic_path_set_udp_sock(struct sock *sk, struct quic_path_addr *a, bool alt);
-void quic_bind_port_put(struct sock *sk, struct quic_bind_port *pp);
 int quic_path_set_bind_port(struct sock *sk, struct quic_path_addr *a, bool alt);
 void quic_path_free(struct sock *sk, struct quic_path_addr *a);
 void quic_path_addr_free(struct sock *sk, struct quic_path_addr *path, bool alt);
-int quic_path_pl_send(struct quic_path_addr *a);
+int quic_path_pl_send(struct quic_path_addr *a, s64 number);
 int quic_path_pl_recv(struct quic_path_addr *a, bool *raise_timer, bool *complete);
 int quic_path_pl_toobig(struct quic_path_addr *a, u32 pmtu, bool *reset_timer);
 void quic_path_pl_reset(struct quic_path_addr *a);

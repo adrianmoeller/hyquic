@@ -4,7 +4,7 @@
 #define HYQUIC_REF_ID_MAX 31
 
 struct hyquic_frame_format_spec_cont {
-    uint16_t spec_length;
+    uint32_t spec_length;
     uint8_t *spec_cursor;
     uint32_t content_length;
     uint8_t *content_cursor;
@@ -57,27 +57,27 @@ static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_
 {
     uint64_t length_value, declared_length;
     uint8_t length_value_len;
-    uint32_t spec_length_tmp;
 
     cont->spec_cursor++;
     cont->spec_length--;
 
-    spec_length_tmp = cont->spec_length;
-    length_value_len = quic_get_var(&cont->spec_cursor, &spec_length_tmp, &length_value);
+
+    length_value_len = quic_get_var(&cont->spec_cursor, &cont->spec_length, &length_value);
     if (!length_value_len) {
         HQ_PR_ERR(sk, "invalid specification (var-int expected)");
         return -EINVAL;
     }
-    cont->spec_length = spec_length_tmp;
 
     if (ref_id) {
-        if (length_value > 4) {
+        if (length_value > 8) {
             HQ_PR_ERR(sk, "invalid specification (declared length too large)");
             return -EINVAL;
         }
 
-        declared_length = quic_get_int(&cont->content_cursor, length_value);
-        cont->content_length -= length_value;
+        if(!quic_get_int(&cont->content_cursor, &cont->content_length, &declared_length, length_value)) {
+            HQ_PR_ERR(sk, "corrupted frame content (buffer end not expected)");
+            return -EINVAL;
+        }
 
         return hyquic_ref_id_to_index(sk, cont, ref_id, declared_length);
     } else {
@@ -92,7 +92,7 @@ static inline int hyquic_parse_fix_len_component(struct sock *sk, struct hyquic_
 static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk, struct hyquic_frame_format_spec_cont *cont, uint8_t ref_id)
 {
     uint64_t declared_length;
-    uint8_t constant;
+    uint64_t constant;
     uint64_t product;
 
     if (!ref_id) {
@@ -105,8 +105,10 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
     cont->spec_cursor++;
     cont->spec_length--;
 
-    constant = quic_get_int(&cont->spec_cursor, 1);
-    cont->spec_length--;
+    if (!quic_get_int(&cont->spec_cursor, &cont->spec_length, &constant, 1)) {
+        HQ_PR_ERR(sk, "invalid specification (8bit-int expected)");
+        return -EINVAL;
+    }
 
     if (!constant) {
         HQ_PR_ERR(sk, "invalid specification (constant must not be 0)");
@@ -114,7 +116,7 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
     }
 
     if (!declared_length) {
-        HQ_PR_DEBUG(sk, "done, ref_id=%u, decl_length=%llu, constant=%u, remain_spec_length=%u", ref_id, declared_length, constant, cont->spec_length);
+        HQ_PR_DEBUG(sk, "done, ref_id=%u, decl_length=%llu, constant=%llu, remain_spec_length=%u", ref_id, declared_length, constant, cont->spec_length);
         return 0;
     }
 
@@ -123,7 +125,7 @@ static inline int hyquic_parse_mult_const_declared_len_component(struct sock *sk
     cont->content_cursor += product;
     cont->content_length -= product;
 
-    HQ_PR_DEBUG(sk, "done, ref_id=%u, decl_length=%llu, constant=%u, remain_spec_length=%u", ref_id, declared_length, constant, cont->spec_length);
+    HQ_PR_DEBUG(sk, "done, ref_id=%u, decl_length=%llu, constant=%llu, remain_spec_length=%u", ref_id, declared_length, constant, cont->spec_length);
     return 0;
 }
 
@@ -133,7 +135,7 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
 {
     int err, i;
     uint64_t declared_length;
-    uint8_t scope_length;
+    uint64_t scope_length;
     struct hyquic_frame_format_spec_cont scope_cont;
 
     if (!ref_id) {
@@ -146,8 +148,10 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
     cont->spec_cursor++;
     cont->spec_length--;
 
-    scope_length = quic_get_int(&cont->spec_cursor, 1);
-    cont->spec_length--;
+    if (!quic_get_int(&cont->spec_cursor, &cont->spec_length, &scope_length, 1)) {
+        HQ_PR_ERR(sk, "invalid specification (8bit-int expected)");
+        return -EINVAL;
+    }
 
     if (!scope_length) {
         HQ_PR_ERR(sk, "invalid specification (scope length must not be 0)");
@@ -157,7 +161,7 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
     if (!declared_length) {
         cont->spec_cursor += scope_length;
         cont->spec_length -= scope_length;
-        HQ_PR_DEBUG(sk, "done, decl_length=%llu, scope_length=%u, remain_spec_length=%u", declared_length, scope_length, cont->spec_length);
+        HQ_PR_DEBUG(sk, "done, decl_length=%llu, scope_length=%llu, remain_spec_length=%u", declared_length, scope_length, cont->spec_length);
         return 0;
     }
 
@@ -184,7 +188,7 @@ static inline int hyquic_parse_mult_scope_declared_len_component(struct sock *sk
     cont->spec_cursor += scope_length;
     cont->spec_length -= scope_length;
 
-    HQ_PR_DEBUG(sk, "done, decl_length=%llu, scope_length=%u, remain_spec_length=%u", declared_length, scope_length, cont->spec_length);
+    HQ_PR_DEBUG(sk, "done, decl_length=%llu, scope_length=%llu, remain_spec_length=%u", declared_length, scope_length, cont->spec_length);
     return 0;
 }
 
@@ -227,7 +231,7 @@ static int hyquic_parse_next_spec_component(struct sock *sk, struct hyquic_frame
     }
 }
 
-static inline int hyquic_parse_frame_content(struct sock *sk, uint8_t *frame_content, uint32_t remaining_length, uint8_t *format_specification, uint16_t spec_length, uint32_t *parsed_length)
+static inline int hyquic_parse_frame_content(struct sock *sk, uint8_t *frame_content, uint32_t remaining_length, uint8_t *format_specification, uint32_t spec_length, uint32_t *parsed_length)
 {
     int err;
     struct hyquic_frame_format_spec_cont cont = {

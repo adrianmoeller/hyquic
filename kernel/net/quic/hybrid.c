@@ -501,7 +501,7 @@ static struct sk_buff* hyquic_frame_create_raw(struct sock *sk, uint8_t **data_p
     snd_cb = HYQUIC_SND_CB(skb);
     snd_cb->common.frame_type = frame_type;
     snd_cb->common.data_bytes = metadata.payload_length;
-    snd_cb->common.rtx_count = metadata.retransmit_count;
+    snd_cb->common.sent_count = metadata.retransmit_count;
     if (metadata.retransmit_count)
         quic_outq(sk)->rtx_count++;
     if (metadata.has_stream_info) {
@@ -553,7 +553,7 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
             }
 
             if (snd_cb->common.stream) {
-                quic_outq_data_tail(sk, skb, true);
+                quic_outq_stream_tail(sk, skb, true);
             } else {
                 hyquic_outq_no_stream_data_tail(sk, skb, true);
             }
@@ -561,7 +561,7 @@ static int hyquic_process_usrquic_frames(struct sock *sk, uint8_t *data, uint32_
             quic_outq_ctrl_tail(sk, skb, true);
         }
     }
-    quic_outq_flush(sk);
+    quic_outq_transmit(sk);
 
     HQ_PR_DEBUG(sk, "done");
     return 0;
@@ -675,6 +675,7 @@ static int hyquic_continue_processing_frames(struct sock *sk, struct sk_buff *sk
 */
 static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlsend_raw_frames_var *ctrlsend_details)
 {
+    struct quic_inqueue *inq = quic_inq(sk);
     struct sk_buff *cursor, *tmp, *fskb;
     struct sk_buff_head *head;
     struct hyquic_ctrlrecv_raw_frames_var *ctrlrecv_details;
@@ -723,11 +724,14 @@ static int hyquic_process_frames_var_reply(struct sock *sk, struct hyquic_ctrlse
                 return -ENOMEM;
             QUIC_SND_CB(fskb)->path_alt = ctrlrecv_details->path_alt;
             quic_outq_ctrl_tail(sk, fskb, true);
-            quic_timer_stop(sk, QUIC_TIMER_ACK);
+            quic_timer_stop(sk, QUIC_TIMER_SACK);
             ctrlrecv_details->ack_sent = true;
-        } else if (!ctrlrecv_details->ack_timer_started) {
-            quic_timer_start(sk, QUIC_TIMER_ACK);
-            ctrlrecv_details->ack_timer_started = true;
+        } else if (!ctrlrecv_details->sack_timer_started) {
+            if (!quic_inq_need_sack(inq)) {
+                quic_timer_reset(sk, QUIC_TIMER_SACK, quic_inq_max_ack_delay(inq));
+                quic_inq_set_need_sack(inq, 1);
+            }
+            ctrlrecv_details->sack_timer_started = true;
         }
     }
 
@@ -793,8 +797,9 @@ out:
  * @param var_frame_encountered pointer to flag that gets set if a frame without format specification is encountered
  * @return negative error code if not successful, otherwise length of parsed frame
 */
-int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic_packet_info *pki, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered)
+int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, uint32_t remaining_pack_len, struct hyquic_frame_details_cont *frame_details_cont, bool *var_frame_encountered)
 {
+	struct quic_packet *packet = quic_packet(sk);
     struct hyquic_frame_details *frame_details = &frame_details_cont->details;
     struct sk_buff *fskb;
     struct hyquic_rcv_cb *rcv_cb;
@@ -832,11 +837,11 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
         rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_RAW_FRAMES_VAR;
         details = &rcv_cb->hyquic_ctrl_details.raw_frames_var;
         details->msg_id = quic_hyquic(sk)->next_ic_msg_id++;
-        details->ack_eliciting = pki->ack_eliciting;
-        details->ack_immediate = pki->ack_immediate;
+        details->ack_eliciting = packet->ack_eliciting;
+        details->ack_immediate = packet->ack_immediate;
         details->ack_sent = false;
-        details->ack_timer_started = false;
-        details->non_probing = pki->non_probing;
+        details->sack_timer_started = false;
+        details->non_probing = packet->non_probing;
         details->path_alt = QUIC_RCV_CB(skb)->path_alt;
 
         __skb_queue_tail(&sk->sk_receive_queue, fskb);
@@ -846,12 +851,12 @@ int hyquic_process_unkwn_frame(struct sock *sk, struct sk_buff *skb, struct quic
     }
 
     if (frame_details->ack_eliciting) {
-        pki->ack_eliciting = 1;
+        packet->ack_eliciting = 1;
         if (frame_details->ack_immediate)
-            pki->ack_immediate = 1;
+            packet->ack_immediate = 1;
     }
     if (frame_details->non_probing)
-        pki->non_probing = 1;
+        packet->non_probing = 1;
 
     return ret;
 }
@@ -891,7 +896,7 @@ int hyquic_process_frame_copy(struct sock *sk, struct sk_buff *skb, uint32_t fra
  * 
  * @param sk quic socket
 */
-inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk)
+inline void hyquic_frame_var_notify_sack_timer_started(struct sock *sk)
 {
     struct sk_buff *skb;
     struct hyquic_rcv_cb *rcv_cb;
@@ -901,7 +906,7 @@ inline void hyquic_frame_var_notify_ack_timer_started(struct sock *sk)
         if (rcv_cb->hyquic_ctrl_type != HYQUIC_CTRL_RAW_FRAMES_VAR)
             continue;
 
-        rcv_cb->hyquic_ctrl_details.raw_frames_var.ack_timer_started = true;
+        rcv_cb->hyquic_ctrl_details.raw_frames_var.sack_timer_started = true;
         return;
     }
 
@@ -970,31 +975,45 @@ int hyquic_flush_unkwn_frames_inqueue(struct sock *sk)
 }
 
 /**
- * Sends a lost frame back to user-quic.
+ * Processes a lost frame.
+ * If frame is a user-frame, sends it back to user-quic or drops it based on specified options.
  * 
  * @param sk quic socket
  * @param fskb socket buffer containing lost frame
- * @return negative error code if not successful, otherwise 0
+ * @return negative error code if not successful, 1 if processed by hyquic, otherwise 0
 */
 int hyquic_process_lost_frame(struct sock *sk, struct sk_buff *fskb)
 {
+    struct hyquic_container *hyquic = quic_hyquic(sk);
     struct sk_buff *skb;
     struct hyquic_rcv_cb *rcv_cb;
+    struct hyquic_frame_details_cont *frame_details_cont = hyquic_frame_details_get(hyquic, QUIC_SND_CB(fskb)->frame_type);
 
-    skb = alloc_skb(fskb->len, GFP_ATOMIC);
-    if (!skb)
-        return -ENOMEM;
-    skb_put_data(skb, fskb->data, fskb->len);
+    if (frame_details_cont) {
+        if (frame_details_cont->details.no_retransmit) {
+            HQ_PR_DEBUG(sk, "no retransmit, type=%u", QUIC_SND_CB(fskb)->frame_type);
+            return 1;
+        }
 
-    rcv_cb = HYQUIC_RCV_CB(skb);
-    rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_LOST_FRAMES;
-    rcv_cb->hyquic_ctrl_details.lost_frames.payload_length = QUIC_SND_CB(fskb)->data_bytes;
-    rcv_cb->hyquic_ctrl_details.lost_frames.retransmit_count = QUIC_SND_CB(fskb)->rtx_count;
+        if (hyquic->options.usrquic_retransmit) {
+            skb = alloc_skb(fskb->len, GFP_ATOMIC);
+            if (!skb)
+                return -ENOMEM;
+            skb_put_data(skb, fskb->data, fskb->len);
 
-    __skb_queue_tail(&sk->sk_receive_queue, skb);
-    sk->sk_data_ready(sk);
+            rcv_cb = HYQUIC_RCV_CB(skb);
+            rcv_cb->hyquic_ctrl_type = HYQUIC_CTRL_LOST_FRAMES;
+            rcv_cb->hyquic_ctrl_details.lost_frames.payload_length = QUIC_SND_CB(fskb)->data_bytes;
+            rcv_cb->hyquic_ctrl_details.lost_frames.retransmit_count = QUIC_SND_CB(fskb)->sent_count;
 
-    HQ_PR_DEBUG(sk, "done, type=%u", QUIC_SND_CB(fskb)->frame_type);
+            __skb_queue_tail(&sk->sk_receive_queue, skb);
+            sk->sk_data_ready(sk);
+
+            HQ_PR_DEBUG(sk, "forwarded to user-quic, type=%u", QUIC_SND_CB(fskb)->frame_type);
+            return 1;
+        }
+    }
+
     return 0;
 }
 

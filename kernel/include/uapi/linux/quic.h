@@ -11,8 +11,12 @@
 #ifndef __uapi_quic_h__
 #define __uapi_quic_h__
 
-#include <linux/types.h>
 #include <linux/socket.h>
+#ifdef __KERNEL__
+#include <linux/types.h>
+#else
+#include <stdint.h>
+#endif
 
 enum {
 	IPPROTO_QUIC = 261,		/* A UDP-Based Multiplexed and Secure Transport	*/
@@ -89,6 +93,8 @@ struct quic_transport_param {
 	uint8_t		disable_active_migration;
 	uint8_t		grease_quic_bit;
 	uint8_t		stateless_reset;
+	uint8_t		disable_1rtt_encryption;
+	uint8_t		disable_compatible_version;
 	uint64_t	max_udp_payload_size;
 	uint64_t	ack_delay_exponent;
 	uint64_t	max_ack_delay;
@@ -170,7 +176,8 @@ enum {
 struct quic_stream_update {
 	uint64_t id;
 	uint32_t state;
-	uint32_t errcode; /* or known_size */
+	uint32_t errcode;
+	uint64_t finalsz;
 };
 
 struct quic_connection_close {

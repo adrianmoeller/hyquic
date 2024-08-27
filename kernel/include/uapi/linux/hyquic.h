@@ -53,7 +53,7 @@ struct hyquic_ctrlrecv_raw_frames_var {
 	uint8_t ack_eliciting:1;
 	uint8_t ack_immediate:1;
 	uint8_t ack_sent:1;
-	uint8_t ack_timer_started:1;
+	uint8_t sack_timer_started:1;
 	uint8_t non_probing:1;
 	uint8_t path_alt:1;
 };

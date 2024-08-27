@@ -49,7 +49,7 @@ static void quic_udp_sock_destroy(struct work_struct *work)
 	struct quic_udp_sock *us = container_of(work, struct quic_udp_sock, work);
 	struct quic_hash_head *head;
 
-	head = quic_udp_sock_head(sock_net(us->sk), &us->addr);
+	head = quic_udp_sock_head(sock_net(us->sk), ntohs(us->addr.v4.sin_port));
 
 	spin_lock(&head->lock);
 	__hlist_del(&us->node);
@@ -88,7 +88,7 @@ static struct quic_udp_sock *quic_udp_sock_create(struct sock *sk, union quic_ad
 	us->sk = sock->sk;
 	memcpy(&us->addr, a, sizeof(*a));
 
-	head = quic_udp_sock_head(net, a);
+	head = quic_udp_sock_head(net, ntohs(a->v4.sin_port));
 	spin_lock(&head->lock);
 	hlist_add_head(&us->node, &head->head);
 	spin_unlock(&head->lock);
@@ -97,56 +97,42 @@ static struct quic_udp_sock *quic_udp_sock_create(struct sock *sk, union quic_ad
 	return us;
 }
 
-static struct quic_udp_sock *quic_udp_sock_lookup(struct sock *sk, union quic_addr *a)
-{
-	struct quic_udp_sock *tmp, *us = NULL;
-	struct net *net = sock_net(sk);
-	struct quic_hash_head *head;
-	union quic_addr sa = {};
-
-	head = quic_udp_sock_head(net, a);
-	spin_lock(&head->lock);
-	hlist_for_each_entry(tmp, &head->head, node) {
-		if (net == sock_net(tmp->sk) &&
-		    !memcmp(&tmp->addr, a, quic_addr_len(sk))) {
-			us = quic_udp_sock_get(tmp);
-			break;
-		}
-	}
-	spin_unlock(&head->lock);
-	if (us)
-		return us;
-
-	/* Search for socket binding to the same port with 0.0.0.0 or :: address */
-	sa.v4.sin_family = a->v4.sin_family;
-	sa.v4.sin_port = a->v4.sin_port;
-	head = quic_udp_sock_head(net, &sa);
-	spin_lock(&head->lock);
-	hlist_for_each_entry(tmp, &head->head, node) {
-		if (net == sock_net(tmp->sk) &&
-		    !memcmp(&tmp->addr, &sa, quic_addr_len(sk))) {
-			us = quic_udp_sock_get(tmp);
-			break;
-		}
-	}
-	spin_unlock(&head->lock);
-
-	if (!us)
-		us = quic_udp_sock_create(sk, a);
-	return us;
-}
-
-struct quic_udp_sock *quic_udp_sock_get(struct quic_udp_sock *us)
+static struct quic_udp_sock *quic_udp_sock_get(struct quic_udp_sock *us)
 {
 	if (us)
 		refcount_inc(&us->refcnt);
 	return us;
 }
 
-void quic_udp_sock_put(struct quic_udp_sock *us)
+static void quic_udp_sock_put(struct quic_udp_sock *us)
 {
 	if (us && refcount_dec_and_test(&us->refcnt))
 		queue_work(quic_wq, &us->work);
+}
+
+static struct quic_udp_sock *quic_udp_sock_lookup(struct sock *sk, union quic_addr *a)
+{
+	struct quic_udp_sock *tmp, *us = NULL;
+	struct quic_addr_family_ops *af_ops;
+	struct net *net = sock_net(sk);
+	struct quic_hash_head *head;
+
+	head = quic_udp_sock_head(net, ntohs(a->v4.sin_port));
+	spin_lock(&head->lock);
+	hlist_for_each_entry(tmp, &head->head, node) {
+		if (net != sock_net(tmp->sk))
+			continue;
+
+		af_ops = quic_af_ops_get(tmp->sk->sk_family);
+		if (af_ops->cmp_sk_addr(sk, &tmp->addr, a)) {
+			us = quic_udp_sock_get(tmp);
+			break;
+		}
+	}
+	spin_unlock(&head->lock);
+	if (!us)
+		us = quic_udp_sock_create(sk, a);
+	return us;
 }
 
 int quic_path_set_udp_sock(struct sock *sk, struct quic_path_addr *path, bool alt)
@@ -163,7 +149,7 @@ int quic_path_set_udp_sock(struct sock *sk, struct quic_path_addr *path, bool al
 	return 0;
 }
 
-void quic_bind_port_put(struct sock *sk, struct quic_bind_port *pp)
+static void quic_path_put_bind_port(struct sock *sk, struct quic_bind_port *pp)
 {
 	struct net *net = sock_net(sk);
 	struct quic_hash_head *head;
@@ -187,7 +173,7 @@ int quic_path_set_bind_port(struct sock *sk, struct quic_path_addr *path, bool a
 	int low, high, remaining;
 	unsigned int rover;
 
-	quic_bind_port_put(sk, port);
+	quic_path_put_bind_port(sk, port);
 
 	rover = ntohs(addr->v4.sin_port);
 	if (rover) {
@@ -238,7 +224,7 @@ void quic_path_addr_free(struct sock *sk, struct quic_path_addr *path, bool alt)
 	src = (struct quic_path_src *)path;
 	quic_udp_sock_put(src->udp_sk[path->active ^ alt]);
 	src->udp_sk[path->active ^ alt] = NULL;
-	quic_bind_port_put(sk, &src->port[path->active ^ alt]);
+	quic_path_put_bind_port(sk, &src->port[path->active ^ alt]);
 out:
 	memset(&path->addr[path->active ^ alt], 0, path->addr_len);
 }
@@ -266,11 +252,12 @@ enum quic_plpmtud_state {
 #define QUIC_PL_BIG_STEP        32
 #define QUIC_PL_MIN_STEP        4
 
-int quic_path_pl_send(struct quic_path_addr *a)
+int quic_path_pl_send(struct quic_path_addr *a, s64 number)
 {
 	struct quic_path_dst *d = (struct quic_path_dst *)a;
 	int pathmtu = 0;
 
+	d->pl.number = number;
 	if (d->pl.probe_count < QUIC_MAX_PROBES)
 		goto out;
 
@@ -420,6 +407,7 @@ void quic_path_pl_reset(struct quic_path_addr *a)
 {
 	struct quic_path_dst *d = (struct quic_path_dst *)a;
 
+	d->pl.number = 0;
 	d->pl.state = QUIC_PL_BASE;
 	d->pl.pmtu = QUIC_BASE_PLPMTU;
 	d->pl.probe_size = QUIC_BASE_PLPMTU;

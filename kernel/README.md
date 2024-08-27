@@ -1,23 +1,34 @@
 # QUIC in Linux Kernel
 
-## Overview
+## Introduction
 
 As mentioned in https://github.com/lxin/tls_hs#the-backgrounds: "some people may argue that TLS
 handshake should stay in user space and use up-call to user space in kernel to complete the
 handshake". This repo is to implement the idea. Note that the main part of the QUIC protocol
 is still in Kernel space.
 
+There are several compelling reasons for implementing in-kernel QUIC:
+- Meeting the needs of kernel consumers like SMB and NFS.
+- Standardizing socket APIs, including essential operations such as listen, accept,
+  connect, sendmsg, recvmsg, close, get/setsockopt and getsock/peername().
+- Incorporating ALPN matching within the kernel, efficiently directing incoming
+  requests to relevant applications across different processes based on ALPN.
+- Minimizing data duplication by utilizing zero-copy techniques like sendfile().
+- Facilitating the crypto offloading in NICs to further enhance performance.
+- Addressing interoperability issues from the variety of userland QUIC implementations.
+
 ## Implementation
 
 ### General Idea
 
-- **What's in Userspace**: Only TLS Handshake Messages processing and creating via gnutls,
-these messages are sent and received via sendmsg/recvmsg() with crypto level in cmsg. See:
+- **What's in Userspace**: Only raw TLS Handshake Messages processing and creating via gnutls.
+These messages are sent and received via sendmsg/recvmsg() with crypto level in cmsg. See:
 [handshake/](https://github.com/lxin/quic/tree/main/handshake).
 
 - **What's in Kernel**: All QUIC protocol except TLS Handshake Messages processing and creating.
-Instead of a ULP layer, it creates IPPROTO_QUIC type socket (similar to IPPROTO_MPTCP) running
-over UDP TUNNEL. See: [net/quic/](https://github.com/lxin/quic/tree/main/net/quic).
+Instead of a ULP layer, it creates IPPROTO_QUIC type socket (similar to IPPROTO_MPTCP and no
+protocol number needed from IANA) running over UDP TUNNELs. See:
+[net/quic/](https://github.com/lxin/quic/tree/main/net/quic).
 
 - **How Kernel Consumers Use It**: Kernel users can send Handshake request from kernel via
 [handshake netlink](https://docs.kernel.org/networking/tls-handshake.html) to Userspace. tlshd
@@ -27,62 +38,75 @@ in [ktls-utils](https://github.com/lxin/ktls-utils) will handle the handshake re
 
 - Handshake:
 
-        +-----------------------------------------------------------------------------------+
-        |                               GNUTLS USER LIBRARY                                 |
-        +---------+-+---------------------+-+------------------------+-+--------------------+
-           TLS HANDSHAKE MSGS       TLS TRANSPORT PARAMS EXT     TLS SECRETS
-           [sendmsg/recvmsg()       [setsockopt/getsockopt()     [setsockopt/getsockopt()
-            with cmsg quic_          with optname QUIC_SOCKOPT_   with optname QUIC_SOCKOPT_
-            handshake_info]          TRANSPORT_PARAM_EXT]         CRYPTO_SECRET]
-                  | ^                     | ^                        | ^
-        Userspace | |                     | |                        | |
-        ----------+-+---------------------+-+------------------------+-+---------------------
-        Kernel    | |                     | |                        | |
-                  v |                     v |                        v |
-            QUIC CRYPTO FRAMES       QUIC TRANSPORT PARAMS       QUIC KEYS
-            [create or parse quic    [encode or decode quic      [derive quic key iv hp_key
-             long packet and quic     tranport params from        for send/recv of handshake
-             crypto frame]            tls tranport params ext]    and application data]
-        +-----------------------------------------------------------------------------------+
-        |    QUIC CONNECTION     |      PACKET      |      FRAME       |      CRYPTO        |
-        +-----------------------------------------------------------------------------------+
-        |                               UDP TUNNEL KERNEL APIs                              |
-        +-----------------------------------------------------------------------------------+
+            +------+  +------+
+            | APP1 |  | APP2 | ...
+            +------+  +------+
+            +-------------------------------------------------+
+            |                libquic (ktls-utils)             |<--------------+
+            |      {quic_handshake_server/client/param()}     |               |
+            +-------------------------------------------------+      +---------------------+
+              {send/recvmsg()}         {set/getsockopt()}            | tlshd (ktls-utils)  |
+              [CMSG handshake_info]    [SOCKOPT_CRYPTO_SECRET]       +---------------------+
+                                       [SOCKOPT_TRANSPORT_PARAM_EXT]
+                    | ^                            | ^                        | ^
+        Userspace   | |                            | |                        | |
+        ------------|-|----------------------------|-|------------------------|-|--------------
+        Kernel      | |                            | |                        | |
+                    v |                            v |                        v |
+            +--------------------------------------------------+         +-------------+
+            |  socket (IPPRTOTO_QUIC)  |       protocol        |<----+   | handshake   |
+            +--------------------------------------------------+     |   | netlink APIs|
+            | stream | connection_id |  cong  |  path  | timer |     |   +-------------+
+            +--------------------------------------------------+     |      |      |
+            |   packet   |   frame   |   crypto   |   pnmap    |     |   +-----+ +-----+
+            +--------------------------------------------------+     |   |     | |     |
+            |         input           |       output           |     |---| SMB | | NFS | ...
+            +--------------------------------------------------+     |   |     | |     |
+            |                   UDP tunnels                    |     |   +-----+ +--+--+
+            +--------------------------------------------------+     +--------------|
 
 - Post-Handshake:
 
-           APPLICATION DATA                QUIC PRIMITIVES
-           [sendmsg/recvmsg()              [setsockopt/getsockopt()
-            with cmsg quic_                 with optname like QUIC_SOCKOPT
-            stream_info]                    _KEY_UPDATE and _STREAM_RESET ...]
-                  | ^                            | ^
-        Userspace | |                            | |
-        ----------+-+----------------------------+-+------------------------------
-        Kernel    | |                            | |
-                  v |                            v |
-            QUIC STREAM FRAMES              QUIC CONTROL FRAMES
-            [quic short packet and          [quic short packet and
-             stream frame creating           corresponding ctrl frames
-             and processing]                 creating and processing]
-        +------------------------------------------------------------------------+
-        | QUIC CONNECTION | STREAM | PACKET | FRAME | CRYPTO | FLOW | CONGESTION |
-        +------------------------------------------------------------------------+
-        |                           UDP TUNNEL KERNEL APIs                       |
-        +------------------------------------------------------------------------+
+            +------+  +------+
+            | APP1 |  | APP2 | ...
+            +------+  +------+
+              {send/recvmsg()}         {set/getsockopt()}
+              [CMSG stream_info]       [SOCKOPT_KEY_UPDATE]
+                                       [SOCKOPT_CONNECTION_MIGRATION]
+                                       [SOCKOPT_STREAM_OPEN/RESET/STOP_SENDING]
+                                       [...]
+                    | ^                            | ^
+        Userspace   | |                            | |
+        ------------|-|----------------------------|-|----------------
+        Kernel      | |                            | |
+                    v |                            v |
+            +--------------------------------------------------+
+            |  socket (IPPRTOTO_QUIC)  |       protocol        |<----+ {kernel_send/recvmsg()}
+            +--------------------------------------------------+     | {kernel_set/getsockopt()}
+            | stream | connection_id |  cong  |  path  | timer |     |
+            +--------------------------------------------------+     |
+            |   packet   |   frame   |   crypto   |   pnmap    |     |   +-----+ +-----+
+            +--------------------------------------------------+     |   |     | |     |
+            |         input           |       output           |     |---| SMB | | NFS | ...
+            +--------------------------------------------------+     |   |     | |     |
+            |                   UDP tunnels                    |     |   +-----+ +--+--+
+            +--------------------------------------------------+     +--------------|
 
 ### Features
-#### most features from these RFCs are supported
-- RFC9000 - *QUIC: A UDP-Based Multiplexed and Secure Transport*
-- RFC9001 - *Using TLS to Secure QUIC*
-- RFC9002 - *QUIC Loss Detection and Congestion Control*
-- RFC9221 - *An Unreliable Datagram Extension to QUIC*
-- RFC9287 - *Greasing the QUIC Bit*
-- RFC9369 - *QUIC Version 2*
-- Handshake APIs for tlshd Use - *NFS/SMB over QUIC*
+- Fundamental support for the following RFCs
+  - RFC9000 - *QUIC: A UDP-Based Multiplexed and Secure Transport*
+  - RFC9001 - *Using TLS to Secure QUIC*
+  - RFC9002 - *QUIC Loss Detection and Congestion Control*
+  - RFC9221 - *An Unreliable Datagram Extension to QUIC*
+  - RFC9287 - *Greasing the QUIC Bit*
+  - RFC9368 - *Compatible Version Negotiation for QUIC*
+  - RFC9369 - *QUIC Version 2*
+  - Handshake APIs for tlshd Use - *NFS/SMB over QUIC*
 
-#### some are still ongoing:
-- Transport Error Codes for All Error Cases
-- Performance Optimization
+- Next step
+  - Submit QUIC module to upstream kernel and libquic to ktls-utils.
+  - Create an Internet Draft For QUIC Sockets API Extensions.
+  - Implement HW crypto offloading infrastructure.
 
 ## INSTALL
 
@@ -166,7 +190,7 @@ in [ktls-utils](https://github.com/lxin/ktls-utils) will handle the handshake re
     # sudo systemctl restart tlshd
     (re-run the selftests in 'run selftests' section)
 
-### Build and Install MSQUIC (Optional):
+### Build and Install MSQUIC (For interoperability tests):
     (NOTE: you can skip this if you don't want to run the interoperability tests with MSQUIC)
 
     Packages Required:
@@ -181,6 +205,39 @@ in [ktls-utils](https://github.com/lxin/ktls-utils) will handle the handshake re
     # sudo make install
     (re-run the selftests in 'run selftests' section)
 
+### Build and Install iperf (For performance tests):
+    # git clone https://github.com/lxin/iperf.git
+    # cd iperf/
+    # ./bootstrap.sh
+    # ./configure --prefix=/usr
+    # make
+    # sudo make install
+
+    On server:
+    # iperf3 -s --pkey /root/quic/tests/keys/server-key.pem  --cert /root/quic/tests/keys/server-cert.pem
+
+    On client:
+    # iperf3 -c $SERVER_IP --quic -l $PACKET_LEN
+
+    QUIC vs kTLS iperf testing over 100G physical NIC with different packet size and MTU:
+
+      UNIT        size:1024        size:4096        size:16384        size:65536
+      Gbits/sec   QUIC | kTLS      QUIC | kTLS      QUIC | kTLS       QUIC | kTLS
+      ---------------------------------------------------------------------------
+      mtu:1500    1.63 | 2.16      2.83 | 5.04      3.17 | 7.84       3.47 | 7.95
+      ---------------------------------------------------------------------------
+      mtu:4500    2.11 | 2.36      4.12 | 5.97      3.76 | 8.11       4.71 | 8.11
+      ---------------------------------------------------------------------------
+      mtu:9000    2.11 | 2.41      5.24 | 6.19      5.03 | 8.66       6.79 | 8.90
+
+    Note kTLS testing is using iperf from https://github.com/Mellanox/iperf_ssl.
+    The performance gap between QUIC and kTLS might be caused by:
+
+      - QUIC does not support GSO.
+      - QUIC has an extra copy on TX path.
+      - QUIC has an extra encryption for header.
+      - QUIC has a longer header for the stream DATA.
+
 ## USAGE
 
 ### Simple APIs Use in User Space
@@ -194,9 +251,9 @@ in [ktls-utils](https://github.com/lxin/ktls-utils) will handle the handshake re
              bind(sockfd)                       bind(listenfd)
                                                 listen(listenfd)
              connect(sockfd)
-             quic_client_handshake()
+             quic_client_handshake(sockfd)
                                                 sockfd = accecpt(listenfd)
-                                                quic_server_handshake()
+                                                quic_server_handshake(sockfd, cert)
           
              sendmsg(sockfd)                    recvmsg(sockfd)
              close(sockfd)                      close(sockfd)

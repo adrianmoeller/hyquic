@@ -111,11 +111,6 @@ static int quic_test_client_handshake(struct socket *sock, struct quic_test_priv
 	struct tls_handshake_args args = {};
 	int err;
 
-	err = sock_common_setsockopt(sock, SOL_QUIC, QUIC_SOCKOPT_ALPN,
-				     KERNEL_SOCKPTR(alpn), strlen(alpn) + 1);
-	if (err)
-		return err;
-
 	init_completion(&priv->sk_handshake_done);
 
 	args.ta_sock = sock;
@@ -139,11 +134,6 @@ static int quic_test_server_handshake(struct socket *sock, struct quic_test_priv
 	struct tls_handshake_args args = {};
 	int err;
 
-	err = sock_common_setsockopt(sock, SOL_QUIC, QUIC_SOCKOPT_ALPN,
-				     KERNEL_SOCKPTR(alpn), strlen(alpn) + 1);
-	if (err)
-		return err;
-
 	init_completion(&priv->sk_handshake_done);
 
 	args.ta_sock = sock;
@@ -165,7 +155,7 @@ static int quic_test_do_client(void)
 {
 	struct quic_test_priv priv = {};
 	struct sockaddr_in ra = {};
-	u64 len = 0, sid = 0;
+	u64 len = 0, sid = 0, rate;
 	struct socket *sock;
 	int err, flag = 0;
 	u32 start, end;
@@ -176,7 +166,10 @@ static int quic_test_do_client(void)
 	priv.filp = sock_alloc_file(sock, 0, NULL);
 	if (IS_ERR(priv.filp))
 		return PTR_ERR(priv.filp);
-
+	err = sock_common_setsockopt(sock, SOL_QUIC, QUIC_SOCKOPT_ALPN,
+				     KERNEL_SOCKPTR(alpn), strlen(alpn));
+	if (err)
+		goto free;
 	ra.sin_family = AF_INET;
 	ra.sin_port = htons((u16)port);
 	if (!in4_pton(ip, strlen(ip), (u8 *)&ra.sin_addr.s_addr, -1, NULL))
@@ -225,8 +218,9 @@ static int quic_test_do_client(void)
 		goto free;
 	}
 	end = jiffies_to_msecs(jiffies);
-	start = (end - start) / 1000;
-	pr_info("ALL RECVD: %u MBytes/Sec\n", TOT_LEN / 1024 / 1024 / start);
+	start = (end - start);
+	rate = ((u64)TOT_LEN * 8 * 1000) / 1024 / 1024 / start;
+	pr_info("ALL RECVD: %llu Mbits/sec\n", rate);
 	err = 0;
 free:
 	fput(priv.filp);
@@ -252,7 +246,10 @@ static int quic_test_do_server(void)
 	err = kernel_bind(sock, (struct sockaddr *)&la, sizeof(la));
 	if (err < 0)
 		goto free;
-
+	err = sock_common_setsockopt(sock, SOL_QUIC, QUIC_SOCKOPT_ALPN,
+				     KERNEL_SOCKPTR(alpn), strlen(alpn));
+	if (err)
+		goto free;
 	err = kernel_listen(sock, 1);
 	if (err < 0)
 		goto free;

@@ -16,6 +16,7 @@
 #include "debug.h"
 #include "connection.h"
 #include "hashtable.h"
+#include "number.h"
 #include "protocol.h"
 #include "crypto.h"
 #include "stream.h"
@@ -41,17 +42,13 @@ enum quic_state {
 	QUIC_SS_ESTABLISHED	= TCP_ESTABLISHED,
 };
 
-struct quic_data {
-	u32 len;
-	void *data;
-};
-
 struct quic_request_sock {
 	struct list_head		list;
 	union quic_addr			da;
 	union quic_addr			sa;
 	struct quic_connection_id	dcid;
 	struct quic_connection_id	scid;
+	struct quic_connection_id	orig_dcid;
 	u8				retry;
 	u32				version;
 };
@@ -70,8 +67,9 @@ struct quic_sock {
 	struct quic_connection_id_set	source;
 	struct quic_connection_id_set	dest;
 	struct quic_stream_table	streams;
+	struct quic_cong		cong;
 	struct quic_crypto		crypto[QUIC_CRYPTO_MAX];
-	struct quic_pnmap		pn_map[QUIC_CRYPTO_MAX];
+	struct quic_pnmap		pn_map[QUIC_PNMAP_MAX];
 
 	struct quic_transport_param	local;
 	struct quic_transport_param	remote;
@@ -82,8 +80,7 @@ struct quic_sock {
 	struct quic_outqueue		outq;
 	struct quic_inqueue		inq;
 	struct quic_packet		packet;
-	struct quic_cong		cong;
-	struct quic_timer		timers[QUIC_TIMER_MAX];
+	struct timer_list		timers[QUIC_TIMER_MAX];
 
 	struct hyquic_container hyquic;
 };
@@ -153,7 +150,7 @@ static inline struct quic_stream_table *quic_streams(const struct sock *sk)
 	return &quic_sk(sk)->streams;
 }
 
-static inline struct quic_timer *quic_timer(const struct sock *sk, u8 type)
+static inline struct timer_list *quic_timer(const struct sock *sk, u8 type)
 {
 	return &quic_sk(sk)->timers[type];
 }
@@ -234,78 +231,13 @@ static inline struct hyquic_container* quic_hyquic(const struct sock *sk)
 	return &quic_sk(sk)->hyquic;
 }
 
-static inline bool quic_version_supported(u32 version)
-{
-	return version == QUIC_VERSION_V1 || version == QUIC_VERSION_V2;
-}
-
-static inline u8 quic_version_get_type(u32 version, u8 type)
-{
-	if (!quic_version_supported(version))
-		return -1;
-
-	if (version == QUIC_VERSION_V1)
-		return type;
-
-	switch (type) {
-	case QUIC_PACKET_INITIAL_V2:
-		return QUIC_PACKET_INITIAL;
-	case QUIC_PACKET_0RTT_V2:
-		return QUIC_PACKET_0RTT;
-	case QUIC_PACKET_HANDSHAKE_V2:
-		return QUIC_PACKET_HANDSHAKE;
-	case QUIC_PACKET_RETRY_V2:
-		return QUIC_PACKET_RETRY;
-	default:
-		return -1;
-	}
-	return -1;
-}
-
-static inline u8 quic_version_put_type(u32 version, u8 type)
-{
-	if (!quic_version_supported(version))
-		return -1;
-
-	if (version == QUIC_VERSION_V1)
-		return type;
-
-	switch (type) {
-	case QUIC_PACKET_INITIAL:
-		return QUIC_PACKET_INITIAL_V2;
-	case QUIC_PACKET_0RTT:
-		return QUIC_PACKET_0RTT_V2;
-	case QUIC_PACKET_HANDSHAKE:
-		return QUIC_PACKET_HANDSHAKE_V2;
-	case QUIC_PACKET_RETRY:
-		return QUIC_PACKET_RETRY_V2;
-	default:
-		return -1;
-	}
-	return -1;
-}
-
-static inline int quic_data_dup(struct quic_data *to, u8 *data, u32 len)
-{
-	if (!len)
-		return 0;
-
-	data = kmemdup(data, len, GFP_ATOMIC);
-	if (!data)
-		return -ENOMEM;
-
-	kfree(to->data);
-	to->data = data;
-	to->len = len;
-	return 0;
-}
-
 int quic_sock_change_saddr(struct sock *sk, union quic_addr *addr, u32 len);
 int quic_sock_change_daddr(struct sock *sk, union quic_addr *addr, u32 len);
-bool quic_request_sock_exists(struct sock *sk, union quic_addr *sa, union quic_addr *da);
 struct sock *quic_sock_lookup(struct sk_buff *skb, union quic_addr *sa, union quic_addr *da);
 struct quic_request_sock *quic_request_sock_dequeue(struct sock *sk);
-int quic_request_sock_enqueue(struct sock *sk, struct quic_request_sock *req);
+int quic_request_sock_enqueue(struct sock *sk, struct quic_connection_id *odcid, u8 retry);
+int quic_accept_sock_exists(struct sock *sk, struct sk_buff *skb);
+bool quic_request_sock_exists(struct sock *sk);
 int hyquic_wait_for_send(struct sock *sk, u64 stream_id, long timeo, u32 msg_len);
 
 #endif /* __net_quic_h__ */

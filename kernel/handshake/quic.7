@@ -366,7 +366,8 @@ closing. All three are 0 or null by default.
 
 .TP
 .B QUIC_SOCKOPT_CONNECTION_MIGRATION
-This option is used to initiate a connection migration.
+This option is used to initiate a connection migration. It can also be used to
+set preferred_address transport param before handshake on server side.
 
 for writing only, and the parameter type is:
 
@@ -394,6 +395,8 @@ for reading and writing, and the parameter type is:
             uint8_t         disable_active_migration; (0 by default)
             uint8_t         grease_quic_bit; (0)
             uint8_t         stateless_reset; (0)
+            uint8_t         disable_1rtt_encryption; (0)
+            uint8_t         disable_compatible_version; (0)
             uint64_t        max_udp_payload_size; (65527)
             uint64_t        ack_delay_exponent; (3)
             uint64_t        max_ack_delay; (25000)
@@ -422,7 +425,8 @@ These members in the 1st group are from RFC9000, and in the 2nd group, the membe
     - plpmtud_probe_timeout: plpmtud probe timeout in usec, 0: disabled
     - validate_peer_address: for server only, verify token and send retry packet
     - receive_session_ticket: for client only, handshake done until ticket is recvd
-    - certificate_request: for server only, 0: IGNORE, 1: REQUEST, 2: REQUIRE
+    - certificate_request: for server, 0: IGNORE 1: REQUEST 2: REQUIRE
+                           for client, 3: NO CERTIFICATE VALIDATION
     - congestion_control_alg: congestion control algorithm
     - payload_cipher_type: AES_GCM_128/AES_GCM_256/AES_CCM_128/CHACHA20_POLY1305
     - version:  QUIC_VERSION_V1 or V2 for now
@@ -449,7 +453,11 @@ for reading and writing, and the parameter type is:
 .TP
 .B QUIC_SOCKOPT_ALPN
 This option is used to configure the Application-Layer Protocol Negotiation before
-handshake, and on Sever and Client it should be set with the same value.
+handshake, multiple ALPNs are separated by ',' e.g. "smbd, h3, ksmbd".
+
+On server side, during handshake it gets ALPN via this socket option and matches
+the ALPN from the client side, and then sets the matched ALPN to the socket, so
+that users can get the selected ALPN via this socket option after handshake.
 
 for reading and writing, and the parameter type is:
 

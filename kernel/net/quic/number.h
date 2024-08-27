@@ -73,11 +73,15 @@ static inline u8 quic_get_var(u8 **pp, u32 *plen, u64 *val)
 	return len;
 }
 
-static inline u32 quic_get_int(u8 **pp, u32 len)
+static inline u8 quic_get_int(u8 **pp, u32 *plen, u64 *val, u32 len)
 {
 	union quic_num n;
 	u8 *p = *pp;
-	u32 v = 0;
+	u64 v = 0;
+
+	if (*plen < len)
+		return 0;
+	*plen -= len;
 
 	n.be32 = 0;
 	switch (len) {
@@ -96,9 +100,14 @@ static inline u32 quic_get_int(u8 **pp, u32 len)
 		memcpy(&n.be32, p, 4);
 		v = ntohl(n.be32);
 		break;
+	case 8:
+		memcpy(&n.be64, p, 8);
+		v = be64_to_cpu(n.be64);
+		break;
 	}
 	*pp = p + len;
-	return v;
+	*val = v;
+	return len;
 }
 
 static inline u8 *quic_put_var(u8 *p, u64 num)
@@ -160,6 +169,28 @@ static inline u8 *quic_put_data(u8 *p, u8 *data, u32 len)
 	return p + len;
 }
 
+static inline u8 *quic_put_param(u8 *p, u16 id, u64 value)
+{
+	p = quic_put_var(p, id);
+	p = quic_put_var(p, quic_var_len(value));
+	return quic_put_var(p, value);
+}
+
+static inline int quic_get_param(u64 *pdest, u8 **pp, u32 *plen)
+{
+	u64 valuelen;
+
+	if (!quic_get_var(pp, plen, &valuelen))
+		return -1;
+
+	if (*plen < valuelen)
+		return -1;
+
+	if (!quic_get_var(pp, plen, pdest))
+		return -1;
+	return 0;
+}
+
 static inline s64 quic_get_num(s64 max_pkt_num, s64 pkt_num, u32 n)
 {
 	s64 expected = max_pkt_num + 1;
@@ -174,6 +205,115 @@ static inline s64 quic_get_num(s64 max_pkt_num, s64 pkt_num, u32 n)
 	if (cand > expected + hwin && cand >= win)
 		return cand - win;
 	return cand;
+}
+
+struct quic_data {
+	u8 *data;
+	u32 len;
+};
+
+static inline struct quic_data *quic_data(struct quic_data *d, u8 *data, u32 len)
+{
+	d->data = data;
+	d->len  = len;
+	return d;
+}
+
+static inline int quic_data_dup(struct quic_data *to, u8 *data, u32 len)
+{
+	if (!len)
+		return 0;
+
+	data = kmemdup(data, len, GFP_ATOMIC);
+	if (!data)
+		return -ENOMEM;
+
+	kfree(to->data);
+	to->data = data;
+	to->len = len;
+	return 0;
+}
+
+static inline int quic_data_cmp(struct quic_data *d1, struct quic_data *d2)
+{
+	return d1->len != d2->len || memcmp(d1->data, d2->data, d1->len);
+}
+
+static inline int quic_data_has(struct quic_data *d1, struct quic_data *d2)
+{
+	struct quic_data d;
+	u64 length;
+	u32 len;
+	u8 *p;
+
+	for (p = d1->data, len = d1->len; len; len -= length, p += length) {
+		quic_get_int(&p, &len, &length, 1);
+		quic_data(&d, p, length);
+		if (!quic_data_cmp(&d, d2))
+			return 1;
+	}
+	return 0;
+}
+
+static inline int quic_data_match(struct quic_data *d1, struct quic_data *d2)
+{
+	struct quic_data d;
+	u64 length;
+	u32 len;
+	u8 *p;
+
+	for (p = d1->data, len = d1->len; len; len -= length, p += length) {
+		quic_get_int(&p, &len, &length, 1);
+		quic_data(&d, p, length);
+		if (quic_data_has(d2, &d))
+			return 1;
+	}
+	return 0;
+}
+
+static inline void quic_data_to_string(u8 *to, u32 *plen, struct quic_data *from)
+{
+	struct quic_data d;
+	u8 *data = to, *p;
+	u64 length;
+	u32 len;
+
+	for (p = from->data, len = from->len; len; len -= length, p += length) {
+		quic_get_int(&p, &len, &length, 1);
+		quic_data(&d, p, length);
+		data = quic_put_data(data, d.data, d.len);
+		if (len - length)
+			data = quic_put_int(data, ',', 1);
+	}
+	*plen = data - to;
+}
+
+static inline void quic_data_from_string(struct quic_data *to, u8 *from, u32 len)
+{
+	struct quic_data d;
+	u8 *p = to->data;
+
+	to->len = 0;
+	while (len) {
+		d.data = p++;
+		d.len  = 1;
+		while (len && *from == ' ') {
+			from++;
+			len--;
+		}
+		while (len) {
+			if (*from == ',') {
+				from++;
+				len--;
+				break;
+			}
+			*p++ = *from++;
+			len--;
+			d.len++;
+		}
+		*d.data = d.len - 1;
+		to->len += d.len;
+	}
 }
 
 static inline u8 quic_peek_var(const u8 *p, u64 *val)
