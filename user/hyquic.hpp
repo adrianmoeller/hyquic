@@ -24,6 +24,13 @@ extern "C" {
 
 namespace hyquic
 {
+    /**
+     * Container for sending and receiving stream data.
+     * 
+     * @id: stream ID
+     * @flags: stream flags
+     * @buff: stream data
+     */
     struct stream_data
     {
         uint64_t id;
@@ -52,12 +59,21 @@ namespace hyquic
         }
     };
 
+    /**
+     * @content_len: the length of the parsed content
+     * @payload_len: the length of application data contained in the parsed content
+     */
     struct handle_frame_result
     {
         uint32_t content_len;
         uint32_t payload_len = 0;
     };
 
+    /**
+     * @payload_length: the length of application data contained in the frame
+     * @retransmit_count: number of retransmissions of this frame
+     * @last_frame: denotes if this frame is the last one in the list of as lost declared frames (may be used for optimization reasons at retransmission)
+     */
     struct lost_frame_metadata
     {
         uint32_t payload_length;
@@ -65,20 +81,70 @@ namespace hyquic
         bool last_frame;
     };
 
+    /**
+     * This abstract class describes the requirements for HyQUIC extensions 
+     * and must be inherited by the user to implement a specific extension.
+     */
     class extension
     {
     protected:
+        /**
+         * Denotes if the remote peer has declared additional transport parameters that are unknown to the kernel-quic.
+         */
         bool remote_transport_param_available = false;
+        /**
+         * Contains encoded additional transport parameters of the remote peer, only if remote_transport_param_available is true.
+         */
         buffer remote_transport_param_content;
 
+        /**
+         * Returns the already encoded transport parameter (ID plus value) that identifies the extension.
+         * This function is called only a single time during connection initiation.
+         * 
+         * @return a buffer containing the transport parameter
+         */
         virtual inline buffer transport_parameter() = 0;
+        /**
+         * Returns a list of frame profiles each wrapped in a frame_profile_container.
+         * This function is called only a single time during connection initiation.
+         * 
+         * @return a vector of frame profiles
+         */
         virtual const std::vector<si::frame_profile_container>& frame_profiles_list() = 0;
+        /**
+         * Parses and processes the content of a received frame according to its frame type.
+         * Returns the content length and the length of possible application data contained in the frame content.
+         * Important to note: Since this function is executed inside a separate thread, actions performed in this function may need synchronization.
+         * For this purpose, you may use the common_mutex provided in the hyquic class.
+         * 
+         * @param type the frame type
+         * @param frame_content the content of the frame excluding the frame type, note: these data should not be modified directly
+         * @return the results of the parsing process
+         */
         virtual handle_frame_result handle_frame(uint64_t type, buffer_view frame_content) = 0;
+        /**
+         * Handles the loss of the provided frame.
+         * Important to note: Since this function is executed inside a separate thread, actions performed in this function may need synchronization.
+         * For this purpose, you may use the common_mutex provided in the hyquic class.
+         * 
+         * @param type the frame type
+         * @param frame_content the content of the frame excluding the frame type, note: these data should not be modified directly
+         * @param frame a view of the whole frame including the frame type (useful for retransmission operations)
+         * @param metadata additional information about the lost frame
+         */
         virtual void handle_lost_frame(uint64_t type, buffer_view frame_content, const buffer_view &frame, const lost_frame_metadata &metadata) = 0;
+        /**
+         * May contain arbitrary code.
+         * This function is executed before connection initiation.
+         */
         virtual void before_connection_initiation()
         {
             // NO-OP
         }
+        /**
+         * May contain arbitrary code.
+         * This function is executed after successful connection initiation.
+         */
         virtual void handshake_done()
         {
             // NO-OP
@@ -99,11 +165,19 @@ namespace hyquic
 #define SOCK_RECV_FAILURE_THRESHOLD 15
 #define SOCK_RECV_FAILURE_RECOVERY_TIME 200 // ms
 
+    /**
+     * The class to instanciate a HyQUIC instance, which is capable to be used as client and server.
+     */
     class hyquic
     {
     public:
         std::mutex common_mutex;
 
+        /**
+         * @param sock_recv_buff_size the size of the receive buffer at socket level
+         * @param sock_recv_timeout the timeout for the receive operation at socket level
+         * @param sock_recv_failure_recovery_time the time to wait until the next receive operation is started after an EAGAIN error occured
+         */
         hyquic(
             uint32_t sock_recv_buff_size = SOCK_RECV_BUFF_INIT_SIZE, 
             time_t sock_recv_timeout = SOCK_RECV_TIMEOUT, 
@@ -115,10 +189,10 @@ namespace hyquic
             sock_recv_timeout(sock_recv_timeout),
             sock_recv_failure_recovery_time(sock_recv_failure_recovery_time),
             sock_recv_failures_in_row(0),
-            recv_context(1), 
+            recv_context(1),
             common_context(1),
             recv_timer(recv_context),
-            max_payload(0), 
+            max_payload(0),
             max_payload_dgram(0)
         {
         }
@@ -134,6 +208,12 @@ namespace hyquic
         hyquic(const hyquic&) = delete;
         hyquic& operator=(hyquic&) = delete;
 
+        /**
+         * Registers an extension to the HyQUIC instance.
+         * Must be executed before starting the HyQUIC instance.
+         * 
+         * @param ext the extension to register
+         */
         void register_extension(extension &ext)
         {
             if (running.load())
@@ -170,6 +250,13 @@ namespace hyquic
             return si::socket_getsockopt(sockfd, optname, optval, optlen);
         }
 
+        /**
+         * Sends encoded frames to the kernel-quic.
+         * 
+         * @param frames provider of to be sent frames
+         * @param dont_wait does not block until sending is completed
+         * @return negative error code if not successful, otherwise the number of bytes sent (of all sent data, not only the frames)
+         */
         inline int send_frames(si::frames_to_send_provider &frames, bool dont_wait = false)
         {
             if (!ready_to_send)
@@ -178,6 +265,13 @@ namespace hyquic
             return si::send_frames(sockfd, frames, dont_wait);
         }
 
+        /**
+         * Sends one encoded frame to the kernel-quic.
+         * 
+         * @param frame_cont container with to be sent frame
+         * @param dont_wait does not block until sending is completed
+         * @return negative error code if not successful, otherwise the number of bytes sent (of all sent data, not only the frames)
+         */
         inline int send_one_frame(si::frame_to_send_container &&frame_cont, bool dont_wait = false)
         {
             if (!ready_to_send)
@@ -188,6 +282,12 @@ namespace hyquic
             return send_frames(frames_to_send, dont_wait);
         }
 
+        /**
+         * Sends data via the specified stream.
+         * 
+         * @param msg the data to send
+         * @return negative error code if not successful, otherwise the number of bytes sent
+         */
         inline int send_msg(const stream_data& msg)
         {
             if (!ready_to_send)
@@ -196,11 +296,25 @@ namespace hyquic
             return quic_sendmsg(sockfd, msg.buff.data, msg.buff.len, msg.id, msg.flags);
         }
 
+        /**
+         * Receives data via streams.
+         * Each call to this function returns a chunk of data whose size is predetermined by interal parameters.
+         * 
+         * @return the received data
+         */
         inline stream_data receive_msg()
         {
             return recv_buff.wait_pop();
         }
 
+        /**
+         * Receives data via streams.
+         * Each call to this function returns a chunk of data whose size is predetermined by interal parameters.
+         * Blocks only until timeout is reached or data is available to receive.
+         * 
+         * @param timeout the maximum time to wait until data are available
+         * @return the received data if available
+         */
         template<class Rep, class Period>
         inline std::optional<stream_data> receive_msg(const std::chrono::duration<Rep, Period> &timeout)
         {
@@ -218,11 +332,17 @@ namespace hyquic
             return common_context;
         }
 
+        /**
+         * Returns the maximum length of a frame that fits into a QUIC packet.
+         */
         const inline uint32_t get_max_payload() const
         {
             return max_payload.load();
         }
 
+        /**
+         * Returns the maximum length of a DATAGRAM frame that fits into a QUIC packet.
+         */
         const inline uint32_t get_max_payload_dgram() const
         {
             return max_payload_dgram.load();

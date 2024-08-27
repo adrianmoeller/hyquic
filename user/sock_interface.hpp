@@ -257,6 +257,7 @@ namespace si
      * 
      * @param sockfd socket file descriptor
      * @param frames provider of to be sent frames
+     * @param dont_wait does not block until sending is completed
      * @return negative error code if not successful, otherwise the number of bytes sent (of all sent data, not only the frames)
      */
     int send_frames(int sockfd, frames_to_send_provider &frames, bool dont_wait = false)
