@@ -13,6 +13,9 @@
 
 namespace hyquic
 {
+    /**
+     * Returns the length in bytes of an encoded variable-length integer for the given integer value.
+     */
     static inline uint8_t get_var_int_length(uint64_t val)
     {
         if (val < 64)
@@ -24,9 +27,17 @@ namespace hyquic
         return 8;
     }
 
+    /**
+     * Used to build a frame format specification (FFS).
+     * It starts with an empty FFS. Components can be added.
+     * Finally, the encoded FFS can be exported.
+     */
     class frame_format_specification_builder
     {
     public:
+        /**
+         * Returns the size in bytes of the encoded FFS.
+         */
         size_t size() const
         {
             size_t size = 0;
@@ -35,6 +46,9 @@ namespace hyquic
             return size;
         }
 
+        /**
+         * Produces and returns the encoded FFS.
+         */
         buffer get_specification() const
         {
             buffer buff(size());
@@ -46,6 +60,13 @@ namespace hyquic
             return buff;
         }
 
+        /**
+         * Creates a variable-length integer component and adds it to the FFS.
+         * 
+         * @param declares_length Denotes if the number contained in the component's field affects the length of a subsequent part of the frame
+         * @param is_payload denotes if the bytes parsed by this component are part application data
+         * @return the reference ID (>0) to identify the declared length field. If declared_length is false, it always returns 0
+         */
         uint8_t add_var_int_component(bool declares_length = false, bool is_payload = false)
         {
             uint8_t ref_id = 0;
@@ -55,7 +76,14 @@ namespace hyquic
             components.push_back(std::make_unique<var_int_component>(ref_id, is_payload));
             return ref_id;
         }
-
+        /**
+         * Creates a fixed length integer component and adds it to the FFS.
+         * 
+         * @param length the length of the field
+         * @param declares_length Denotes if the number contained in the component's field affects the length of a subsequent part of the frame
+         * @param is_payload denotes if the bytes parsed by this component are part application data
+         * @return the reference ID (>0) to identify the declared length field. If declared_length is false, it always returns 0
+         */
         uint8_t add_fix_len_component(uint32_t length, bool declares_length = false, bool is_payload = false)
         {
             uint8_t ref_id = 0;
@@ -66,16 +94,35 @@ namespace hyquic
             return ref_id;
         }
 
+        /**
+         * Creates a multiply constant by declared length component and adds it to the FFS.
+         * 
+         * @param declared_length_ref_id the reference ID of the declared length field
+         * @param constant the constant that is multiplied with the declared length to determine the field length
+         * @param is_payload denotes if the bytes parsed by this component are part application data
+         */
         void add_mult_const_decl_len_component(uint8_t declared_length_ref_id, uint8_t constant, bool is_payload = false)
         {
             components.push_back(std::make_unique<mult_const_decl_len_component>(constant, declared_length_ref_id, is_payload));
         }
 
+        /**
+         * Creates a multiply scope by declared length component and adds it to the FFS.
+         * 
+         * @param declared_length_ref_id the reference ID of the declared length field
+         * @param scope another FFS builder describing the scope that is executed multiple times in a row according to the declared length
+         */
         void add_mult_scope_decl_len_component(uint8_t declared_length_ref_id, frame_format_specification_builder &scope)
         {
             components.push_back(std::make_unique<mult_scope_decl_len_component>(scope, declared_length_ref_id));
         }
 
+        /**
+         * Creates a backfill component and adds it to the FFS.
+         * Important to node: this component must always be the last component of the FFS.
+         * 
+         * @param is_payload denotes if the bytes parsed by this component are part application data
+         */
         void add_backfill_component(bool is_payload = false)
         {
             components.push_back(std::make_unique<backfill_component>(is_payload));
@@ -214,11 +261,22 @@ namespace hyquic
         uint8_t ref_id_counter = 1;
     };
 
+    /**
+     * Creates an encoded FFS that describes an empty frame.
+     * 
+     * @return a buffer containing an empty FFS
+     */
     inline buffer no_frame_format_specification()
     {
         return buffer();
     }
 
+    /**
+     * Creates an encoded FFS that describes a fixed length frame.
+     * 
+     * @param length the length of the frame
+     * @return a buffer containing the FFS
+     */
     inline buffer fixed_length_frame_format_specification(uint32_t length)
     {
         frame_format_specification_builder builder;
