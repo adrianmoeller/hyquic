@@ -14,6 +14,9 @@
 
 namespace hyquic
 {
+    /**
+     * A buffer that manages an allocated memory range via a pointer.
+     */
     struct buffer
     {
         uint8_t *data;
@@ -73,6 +76,10 @@ namespace hyquic
     const endian_order NATIVE = endian_order::native;
     const endian_order NETWORK = endian_order::big;
 
+    /**
+     * A view onto an allocated memory range managed via a separate buffer object.
+     * It contains a set of utility functions to extract and manipulate data inside the memory range.
+     */
     class buffer_view
     {
     public:
@@ -340,6 +347,11 @@ namespace hyquic
         };
     };
 
+    /**
+     * A view onto an outsized allocated memory range.
+     * This class can be used if the data length is not known in advance but can be estimated by an upper bound.
+     * To shorten the memory range to its final size, use the trim() function.
+     */
     class outsized_buffer_view : public buffer_view
     {
     public:
@@ -361,6 +373,10 @@ namespace hyquic
         uint32_t base_len;
     };
 
+    /**
+     * A thread-safe FIFO-queue.
+     * It has the ability to block until data are available in the queue.
+     */
     template<class T>
     class wait_queue
     {
