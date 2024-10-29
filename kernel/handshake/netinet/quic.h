@@ -8,6 +8,7 @@
  *
  * Written or modified by:
  *    Xin Long <lucien.xin@gmail.com>
+ *    Adrian Moeller (modified for HyQUIC)
  */
 
 #ifndef __NETINET_QUIC_H__

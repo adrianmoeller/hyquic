@@ -1,3 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
+/* HyQUIC - A hybrid user-kernel QUIC implementation 
+ * based on the QUIC kernel implementation by Xin Long.
+ * Copyright (C) 2024  Adrian Moeller
+ * 
+ * Written or modified by:
+ * 	   Adrian Moeller
+ */
+
 #define BOOST_TEST_MODULE frame_format_spec
 #include <boost/test/included/unit_test.hpp>
 

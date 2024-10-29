@@ -1,3 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0+ WITH Linux-syscall-note */
+/* HyQUIC - A hybrid user-kernel QUIC implementation 
+ * based on the QUIC kernel implementation by Xin Long.
+ * Copyright (C) 2024  Adrian Moeller
+ * 
+ * Written or modified by:
+ * 	   Adrian Moeller
+ */
+
 #ifndef __QUIC_DEBUG_H__
 #define __QUIC_DEBUG_H__
 

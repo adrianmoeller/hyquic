@@ -6,6 +6,7 @@
  *
  * Written or modified by:
  *    Xin Long <lucien.xin@gmail.com>
+ *    Adrian Moeller (modified for HyQUIC)
  */
 
 #ifndef __QUIC_CONG_H__

@@ -8,6 +8,7 @@
  *
  * Written or modified by:
  *    Xin Long <lucien.xin@gmail.com>
+ *    Adrian Moeller (modified for HyQUIC)
  */
 
 #include "socket.h"
